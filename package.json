@@ -1,0 +1,18 @@
+{
+  "name": "course-selling-website",
+  "version": "1.0.0",
+  "description": "Website bán khóa học với Vue.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.3.4",
+    "vue-router": "^4.2.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.4.0",
+    "vite": "^4.5.0"
+  }
+}
