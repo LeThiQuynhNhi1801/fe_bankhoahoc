@@ -36,6 +36,7 @@
               <p>✅ Chứng chỉ hoàn thành</p>
             </div>
           </div>
+
         </div>
       </div>
 
@@ -164,14 +165,20 @@
       </div>
     </div>
   </div>
-  <div v-else class="loading">
+  <div v-else-if="isLoading" class="loading">
     <p>Đang tải...</p>
+  </div>
+  <div v-else-if="error" class="error-message">
+    <p>{{ error }}</p>
+    <button @click="loadCourse" class="btn btn-primary">Thử lại</button>
   </div>
 </template>
 
 <script>
 import { ref, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { courseService } from '../services/courseService'
+import { chapterService } from '../services/chapterService'
 
 export default {
   name: 'CourseDetail',
@@ -188,6 +195,8 @@ export default {
     const course = ref(null)
     const activeTab = ref('overview')
     const expandedChapters = reactive({})
+    const isLoading = ref(false)
+    const error = ref(null)
 
     const tabs = [
       { id: 'overview', label: 'Tổng Quan' },
@@ -195,120 +204,37 @@ export default {
       { id: 'reviews', label: 'Đánh Giá' }
     ]
 
-    const coursesData = {
-      1: {
-        id: 1,
-        title: 'Lập Trình Web với Vue.js',
-        instructor: 'Nguyễn Văn A',
-        price: 499000,
-        originalPrice: 699000,
-        rating: 4.8,
-        reviews: 245,
-        students: 1250,
-        duration: '12 giờ',
-        category: 'Lập trình Web',
-        image: 'https://via.placeholder.com/600x400/4F46E5/FFFFFF?text=Vue.js',
-        description: 'Khóa học toàn diện về Vue.js, từ cơ bản đến nâng cao. Bạn sẽ học cách xây dựng ứng dụng web hiện đại, tương tác với Vue 3 Composition API, Vue Router, và Vuex.',
-        learningPoints: [
-          'Hiểu rõ về Vue.js và các khái niệm cơ bản',
-          'Xây dựng component và quản lý state',
-          'Sử dụng Vue Router cho routing',
-          'Tích hợp API và xử lý dữ liệu',
-          'Deploy ứng dụng lên production'
-        ],
-        requirements: [
-          'Kiến thức cơ bản về HTML, CSS, JavaScript',
-          'Máy tính có kết nối internet',
-          'Tinh thần học hỏi và kiên trì'
-        ],
-        chapters: [
-          {
-            title: 'Chương 1: Giới Thiệu Vue.js',
-            lessons: [
-              { title: 'Vue.js là gì?', duration: '15 phút' },
-              { title: 'Cài đặt môi trường', duration: '20 phút' },
-              { title: 'Tạo project đầu tiên', duration: '25 phút' }
-            ],
-            documents: [
-              { name: 'Bai-giang-chuong-1.pdf', type: 'pdf', size: '2.5 MB' },
-              { name: 'Slide-chuong-1.docx', type: 'word', size: '1.2 MB' },
-              { name: 'Bai-tap-chuong-1.xlsx', type: 'excel', size: '500 KB' }
-            ],
-            videos: [
-              { name: 'Video 1: Giới thiệu Vue.js', duration: '15:30', size: '125 MB' },
-              { name: 'Video 2: Cài đặt môi trường', duration: '20:15', size: '180 MB' }
-            ]
-          },
-          {
-            title: 'Chương 2: Vue.js Cơ Bản',
-            lessons: [
-              { title: 'Template và Data Binding', duration: '30 phút' },
-              { title: 'Directives', duration: '25 phút' },
-              { title: 'Events và Methods', duration: '30 phút' }
-            ],
-            documents: [
-              { name: 'Bai-giang-chuong-2.pdf', type: 'pdf', size: '3.1 MB' },
-              { name: 'Code-mau-chuong-2.docx', type: 'word', size: '800 KB' }
-            ],
-            videos: [
-              { name: 'Video 3: Template và Data Binding', duration: '30:45', size: '250 MB' },
-              { name: 'Video 4: Directives trong Vue.js', duration: '25:20', size: '200 MB' }
-            ]
-          },
-          {
-            title: 'Chương 3: Components',
-            lessons: [
-              { title: 'Tạo và sử dụng Components', duration: '35 phút' },
-              { title: 'Props và Events', duration: '30 phút' },
-              { title: 'Slots', duration: '25 phút' }
-            ],
-            documents: [
-              { name: 'Bai-giang-chuong-3.pdf', type: 'pdf', size: '2.8 MB' },
-              { name: 'Vi-du-components.xlsx', type: 'excel', size: '600 KB' }
-            ],
-            videos: [
-              { name: 'Video 5: Components trong Vue.js', duration: '35:10', size: '280 MB' },
-              { name: 'Video 6: Props và Events', duration: '30:50', size: '240 MB' }
-            ]
-          }
-        ],
-        reviewsList: [
-          {
-            id: 1,
-            user: 'Trần Văn X',
-            rating: 5,
-            comment: 'Khóa học rất hay, giảng viên giải thích dễ hiểu. Tôi đã học được rất nhiều!',
-            date: '2024-01-15'
-          },
-          {
-            id: 2,
-            user: 'Nguyễn Thị Y',
-            rating: 4,
-            comment: 'Nội dung tốt, nhưng có một số phần cần giải thích chi tiết hơn.',
-            date: '2024-01-10'
-          }
-        ],
-        lastUpdated: 'Tháng 1, 2024'
-      }
-    }
 
-    const loadCourse = () => {
-      const courseId = parseInt(props.id)
-      
-      // Tải từ localStorage trước (khóa học mới)
-      const savedCourses = JSON.parse(localStorage.getItem('courses') || '[]')
-      const savedCourse = savedCourses.find(c => c.id === courseId)
-      
-      if (savedCourse) {
-        course.value = savedCourse
-      } else {
-        // Fallback về dữ liệu mặc định
-        course.value = coursesData[courseId] || coursesData[1]
-      }
-      
-      // Mở rộng chapter đầu tiên mặc định
-      if (course.value && course.value.chapters) {
-        expandedChapters[0] = true
+    const loadCourse = async () => {
+      try {
+        isLoading.value = true
+        error.value = null
+        const courseId = parseInt(props.id)
+        
+        const courseData = await courseService.getById(courseId)
+        
+        // Load chapters if not included
+        if (!courseData.chapters || courseData.chapters.length === 0) {
+          try {
+            const chapters = await chapterService.getList(courseId)
+            courseData.chapters = chapters
+          } catch (err) {
+            console.warn('Could not load chapters:', err)
+            courseData.chapters = []
+          }
+        }
+        
+        course.value = courseData
+        
+        // Mở rộng chapter đầu tiên mặc định
+        if (course.value && course.value.chapters && course.value.chapters.length > 0) {
+          expandedChapters[0] = true
+        }
+      } catch (err) {
+        console.error('Failed to load course:', err)
+        error.value = 'Không thể tải thông tin khóa học. Vui lòng thử lại sau.'
+      } finally {
+        isLoading.value = false
       }
     }
 
@@ -347,25 +273,16 @@ export default {
       }).format(price)
     }
 
-    const addToCart = () => {
-      const cart = JSON.parse(localStorage.getItem('cart') || '[]')
-      const existingItem = cart.find(item => item.id === course.value.id)
-      
-      if (existingItem) {
-        existingItem.quantity += 1
-      } else {
-        cart.push({
-          id: course.value.id,
-          title: course.value.title,
-          price: course.value.price,
-          image: course.value.image,
-          quantity: 1
-        })
+    const addToCart = async () => {
+      try {
+        const { cartService } = await import('../services/cartService')
+        await cartService.addItem(course.value.id)
+        emit('add-to-cart')
+        alert('Đã thêm vào giỏ hàng!')
+      } catch (error) {
+        console.error('Failed to add to cart:', error)
+        alert('Không thể thêm vào giỏ hàng. Vui lòng đăng nhập!')
       }
-      
-      localStorage.setItem('cart', JSON.stringify(cart))
-      emit('add-to-cart')
-      alert('Đã thêm vào giỏ hàng!')
     }
 
     const buyNow = () => {
@@ -373,11 +290,15 @@ export default {
       router.push('/checkout')
     }
 
+
     return {
       course,
       tabs,
       activeTab,
       expandedChapters,
+      isLoading,
+      error,
+      loadCourse,
       toggleChapter,
       getDocumentIcon,
       downloadDocument,

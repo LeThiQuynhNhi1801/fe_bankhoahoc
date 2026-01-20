@@ -50,7 +50,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from './composables/useAuth'
 
@@ -58,7 +58,7 @@ export default {
   name: 'App',
   setup() {
     const router = useRouter()
-    const { isAuthenticated, isAdmin, isTeacher, userName, logout } = useAuth()
+    const { isAuthenticated, isAdmin, isTeacher, userName, logout, initAuth, currentUser } = useAuth()
     const cartCount = ref(0)
 
     const loadCart = () => {
@@ -75,8 +75,21 @@ export default {
       router.push('/')
     }
 
+    // Watch để debug
+    watch(() => currentUser.value, (newUser) => {
+      console.log('App.vue - Current user changed:', newUser)
+      console.log('App.vue - User role:', newUser?.role)
+      console.log('App.vue - Is admin:', newUser?.role === 'admin')
+    }, { immediate: true, deep: true })
+
+    watch(() => isAdmin.value, (newValue) => {
+      console.log('App.vue - isAdmin changed:', newValue)
+    }, { immediate: true })
+
     onMounted(() => {
       loadCart()
+      // initAuth sẽ được gọi tự động từ useAuth composable
+      // Không cần gọi lại ở đây để tránh conflict
     })
 
     return {

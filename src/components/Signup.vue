@@ -4,12 +4,14 @@
       <h2>Đăng Ký</h2>
       <form @submit.prevent="handleSignup">
         <div class="form-group">
-          <label>Họ và Tên *</label>
+          <label>Tên đăng nhập *</label>
           <input 
-            v-model="formData.name" 
+            v-model="formData.username" 
             type="text" 
             required 
-            placeholder="Nhập họ và tên"
+            placeholder="Nhập tên đăng nhập (3-50 ký tự)"
+            minlength="3"
+            maxlength="50"
           />
         </div>
 
@@ -24,22 +26,12 @@
         </div>
 
         <div class="form-group">
-          <label>Tên đăng nhập *</label>
-          <input 
-            v-model="formData.username" 
-            type="text" 
-            required 
-            placeholder="Nhập tên đăng nhập"
-          />
-        </div>
-
-        <div class="form-group">
           <label>Mật khẩu *</label>
           <input 
             v-model="formData.password" 
             type="password" 
             required 
-            placeholder="Nhập mật khẩu"
+            placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
             minlength="6"
           />
         </div>
@@ -56,12 +48,21 @@
         </div>
 
         <div class="form-group">
-          <label>Vai trò</label>
-          <select v-model="formData.role" class="form-select">
-            <option value="user">Học viên</option>
-            <option value="teacher">Giáo viên</option>
-          </select>
-          <small class="form-hint">Chọn vai trò của bạn trong hệ thống</small>
+          <label>Họ và Tên</label>
+          <input 
+            v-model="formData.fullName" 
+            type="text" 
+            placeholder="Nhập họ và tên (tùy chọn)"
+          />
+        </div>
+
+        <div class="form-group">
+          <label>Số điện thoại</label>
+          <input 
+            v-model="formData.phoneNumber" 
+            type="tel" 
+            placeholder="Nhập số điện thoại (tùy chọn)"
+          />
         </div>
 
         <div v-if="error" class="error-message">{{ error }}</div>
@@ -89,18 +90,23 @@ export default {
     const error = ref('')
 
     const formData = reactive({
-      name: '',
-      email: '',
       username: '',
+      email: '',
       password: '',
       confirmPassword: '',
-      role: 'user'
+      fullName: '',
+      phoneNumber: ''
     })
 
-    const handleSignup = () => {
+    const handleSignup = async () => {
       error.value = ''
 
       // Validation
+      if (formData.username.length < 3 || formData.username.length > 50) {
+        error.value = 'Tên đăng nhập phải có từ 3 đến 50 ký tự!'
+        return
+      }
+
       if (formData.password !== formData.confirmPassword) {
         error.value = 'Mật khẩu xác nhận không khớp!'
         return
@@ -111,20 +117,25 @@ export default {
         return
       }
 
-      // Kiểm tra username đã tồn tại chưa
-      const users = JSON.parse(localStorage.getItem('users') || '[]')
-      const existingUser = users.find(u => u.username === formData.username || u.email === formData.email)
-      
-      if (existingUser) {
-        error.value = 'Tên đăng nhập hoặc email đã tồn tại!'
-        return
+      // Chuẩn bị dữ liệu theo RegisterRequest
+      const registerData = {
+        username: formData.username.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        fullName: formData.fullName.trim() || null,
+        phoneNumber: formData.phoneNumber.trim() || null
       }
 
-      // Gọi hàm signup
-      if (signup(formData)) {
-        router.push('/')
-      } else {
-        error.value = 'Đăng ký thất bại. Vui lòng thử lại!'
+      // Gọi API register
+      try {
+        const success = await signup(registerData)
+        if (success) {
+          router.push('/login')
+        } else {
+          error.value = 'Đăng ký thất bại. Tên đăng nhập hoặc email đã tồn tại!'
+        }
+      } catch (err) {
+        error.value = err.data?.message || err.message || 'Đăng ký thất bại. Vui lòng thử lại!'
       }
     }
 

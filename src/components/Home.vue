@@ -13,7 +13,13 @@
     <section class="featured-courses">
       <div class="container">
         <h2 class="section-title">Khóa Học Nổi Bật</h2>
-        <div class="courses-grid">
+        <div v-if="isLoading" class="loading">
+          <p>Đang tải khóa học...</p>
+        </div>
+        <div v-else-if="featuredCourses.length === 0" class="no-courses">
+          <p>Chưa có khóa học nào.</p>
+        </div>
+        <div v-else class="courses-grid">
           <div 
             v-for="course in featuredCourses" 
             :key="course.id"
@@ -62,52 +68,39 @@
 </template>
 
 <script>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { courseService } from '../services/courseService'
 
 export default {
   name: 'Home',
   setup() {
     const router = useRouter()
+    const featuredCourses = ref([])
+    const isLoading = ref(false)
     
-    const featuredCourses = ref([
-      {
-        id: 1,
-        title: 'Lập Trình Web với Vue.js',
-        instructor: 'Nguyễn Văn A',
-        price: 499000,
-        rating: 4.8,
-        students: 1250,
-        image: 'https://via.placeholder.com/300x200/4F46E5/FFFFFF?text=Vue.js'
-      },
-      {
-        id: 2,
-        title: 'Python Cho Người Mới Bắt Đầu',
-        instructor: 'Trần Thị B',
-        price: 399000,
-        rating: 4.9,
-        students: 2100,
-        image: 'https://via.placeholder.com/300x200/10B981/FFFFFF?text=Python'
-      },
-      {
-        id: 3,
-        title: 'Thiết Kế UI/UX Chuyên Nghiệp',
-        instructor: 'Lê Văn C',
-        price: 599000,
-        rating: 4.7,
-        students: 890,
-        image: 'https://via.placeholder.com/300x200/F59E0B/FFFFFF?text=UI/UX'
-      },
-      {
-        id: 4,
-        title: 'JavaScript Nâng Cao',
-        instructor: 'Phạm Thị D',
-        price: 549000,
-        rating: 4.9,
-        students: 1650,
-        image: 'https://via.placeholder.com/300x200/EF4444/FFFFFF?text=JavaScript'
+    const loadFeaturedCourses = async () => {
+      try {
+        isLoading.value = true
+        const response = await courseService.getList()
+        // Lấy 4 khóa học đầu tiên làm featured
+        const courses = Array.isArray(response) ? response : (response.data || response.courses || [])
+        featuredCourses.value = courses.slice(0, 4).map(course => ({
+          id: course.id,
+          title: course.title,
+          instructor: course.instructorName || course.instructor || 'N/A',
+          price: course.price || 0,
+          rating: course.rating || 0,
+          students: course.studentCount || 0,
+          image: course.thumbnail || course.image || 'https://via.placeholder.com/300x200'
+        }))
+      } catch (error) {
+        console.error('Failed to load featured courses:', error)
+        featuredCourses.value = []
+      } finally {
+        isLoading.value = false
       }
-    ])
+    }
 
     const formatPrice = (price) => {
       return new Intl.NumberFormat('vi-VN', {
@@ -120,8 +113,13 @@ export default {
       router.push(`/course/${id}`)
     }
 
+    onMounted(() => {
+      loadFeaturedCourses()
+    })
+
     return {
       featuredCourses,
+      isLoading,
       formatPrice,
       goToCourse
     }

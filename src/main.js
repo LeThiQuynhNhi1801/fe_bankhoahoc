@@ -12,6 +12,7 @@ import Signup from './components/Signup.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import UploadDocument from './components/UploadDocument.vue'
 import CreateCourse from './components/CreateCourse.vue'
+import { useAuth } from './composables/useAuth'
 
 const routes = [
   { path: '/', component: Home },
@@ -22,14 +23,77 @@ const routes = [
   { path: '/order-success', component: OrderSuccess },
   { path: '/login', component: Login },
   { path: '/signup', component: Signup },
-  { path: '/admin', component: AdminDashboard },
-  { path: '/admin/create-course', component: CreateCourse },
-  { path: '/admin/upload', component: UploadDocument }
+  { 
+    path: '/admin', 
+    component: AdminDashboard,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  { 
+    path: '/admin/create-course', 
+    component: CreateCourse,
+    meta: { requiresAuth: true, requiresAdminOrInstructor: true }
+  },
+  { 
+    path: '/admin/upload', 
+    component: UploadDocument,
+    meta: { requiresAuth: true, requiresAdminOrInstructor: true }
+  }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+// Route guard
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem('token')
+  
+  // Kiểm tra nếu route yêu cầu authentication
+  if (to.meta.requiresAuth) {
+    if (!token) {
+      console.log('[Router] No token, redirecting to login')
+      next('/login')
+      return
+    }
+    
+    // Decode token để lấy role
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      const role = payload.role
+      
+      console.log('[Router] Token role:', role)
+      
+      // Kiểm tra role nếu route yêu cầu admin
+      if (to.meta.requiresAdmin) {
+        const isAdminRole = role === 'ADMIN' || role === 'admin'
+        if (!isAdminRole) {
+          console.log('[Router] Not admin, redirecting to home. Role:', role)
+          alert('Bạn không có quyền truy cập trang này! Chỉ ADMIN mới có quyền.')
+          next('/')
+          return
+        }
+      }
+      
+      // Kiểm tra role nếu route yêu cầu admin hoặc instructor
+      if (to.meta.requiresAdminOrInstructor) {
+        const isAdminRole = role === 'ADMIN' || role === 'admin'
+        const isInstructorRole = role === 'INSTRUCTOR' || role === 'instructor'
+        
+        if (!isAdminRole && !isInstructorRole) {
+          console.log('[Router] Not admin or instructor, redirecting to home. Role:', role)
+          alert('Bạn không có quyền tạo khóa học! Chỉ ADMIN hoặc INSTRUCTOR mới có quyền này.')
+          next('/')
+          return
+        }
+      }
+    } catch (error) {
+      console.error('[Router] Failed to decode token:', error)
+      // Nếu không decode được token, vẫn cho phép truy cập và để backend xử lý
+    }
+  }
+  
+  next()
 })
 
 const app = createApp(App)

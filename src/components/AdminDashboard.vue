@@ -65,7 +65,13 @@
 
       <div class="recent-orders">
         <h2>Đơn Hàng Gần Đây</h2>
-        <div class="orders-table">
+        <div v-if="isLoading" class="loading">
+          <p>Đang tải đơn hàng...</p>
+        </div>
+        <div v-else-if="recentOrders.length === 0" class="no-orders">
+          <p>Chưa có đơn hàng nào.</p>
+        </div>
+        <div v-else class="orders-table">
           <table>
             <thead>
               <tr>
@@ -96,41 +102,68 @@
 
 <script>
 import { ref, onMounted } from 'vue'
+import { adminService } from '../services/adminService'
+import { orderService } from '../services/orderService'
+import { courseService } from '../services/courseService'
 
 export default {
   name: 'AdminDashboard',
   setup() {
-    const totalCourses = ref(24)
-    const totalStudents = ref(1543)
-    const totalRevenue = ref(125000000)
-    const newOrders = ref(12)
+    const totalCourses = ref(0)
+    const totalStudents = ref(0)
+    const totalRevenue = ref(0)
+    const newOrders = ref(0)
+    const recentOrders = ref([])
+    const isLoading = ref(false)
 
-    const recentOrders = ref([
-      {
-        id: 1001,
-        customer: 'Nguyễn Văn A',
-        amount: 499000,
-        status: 'completed',
-        statusText: 'Hoàn thành',
-        date: '2024-01-20'
-      },
-      {
-        id: 1002,
-        customer: 'Trần Thị B',
-        amount: 899000,
-        status: 'pending',
-        statusText: 'Đang xử lý',
-        date: '2024-01-20'
-      },
-      {
-        id: 1003,
-        customer: 'Lê Văn C',
-        amount: 549000,
-        status: 'completed',
-        statusText: 'Hoàn thành',
-        date: '2024-01-19'
+    const loadStats = async () => {
+      try {
+        isLoading.value = true
+        // Load stats từ API
+        try {
+          const stats = await adminService.getStats()
+          totalCourses.value = stats.totalCourses || 0
+          totalStudents.value = stats.totalStudents || 0
+          totalRevenue.value = stats.totalRevenue || 0
+          newOrders.value = stats.newOrders || 0
+          recentOrders.value = stats.recentOrders || []
+        } catch (error) {
+          console.warn('Admin stats API not available, calculating from data:', error)
+          // Fallback: tính từ dữ liệu có sẵn
+          const courses = await courseService.getList()
+          const orders = await orderService.getList()
+          const courseList = Array.isArray(courses) ? courses : (courses.data || [])
+          const orderList = Array.isArray(orders) ? orders : (orders.data || [])
+          
+          totalCourses.value = courseList.length
+          totalStudents.value = courseList.reduce((sum, c) => sum + (c.studentCount || 0), 0)
+          totalRevenue.value = orderList.reduce((sum, o) => sum + (o.totalAmount || 0), 0)
+          newOrders.value = orderList.filter(o => o.status === 'PENDING').length
+          recentOrders.value = orderList.slice(0, 10).map(order => ({
+            id: order.id,
+            customer: order.userName || 'N/A',
+            amount: order.totalAmount || 0,
+            status: order.status?.toLowerCase() || 'pending',
+            statusText: getStatusText(order.status),
+            date: new Date(order.createdAt).toLocaleDateString('vi-VN')
+          }))
+        }
+      } catch (error) {
+        console.error('Failed to load admin stats:', error)
+      } finally {
+        isLoading.value = false
       }
-    ])
+    }
+
+    const getStatusText = (status) => {
+      const statusMap = {
+        'PENDING': 'Đang xử lý',
+        'PAID': 'Đã thanh toán',
+        'CANCELLED': 'Đã hủy',
+        'REFUNDED': 'Đã hoàn tiền'
+      }
+      return statusMap[status] || status
+    }
 
     const formatPrice = (price) => {
       return new Intl.NumberFormat('vi-VN', {
@@ -139,12 +172,17 @@ export default {
       }).format(price)
     }
 
+    onMounted(() => {
+      loadStats()
+    })
+
     return {
       totalCourses,
       totalStudents,
       totalRevenue,
       newOrders,
       recentOrders,
+      isLoading,
       formatPrice
     }
   }

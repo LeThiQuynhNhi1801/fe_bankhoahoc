@@ -6,7 +6,7 @@
       <div class="upload-form">
         <div class="form-section">
           <h2>Chọn Khóa Học</h2>
-          <select v-model="selectedCourse" class="form-select">
+          <select v-model="selectedCourse" class="form-select" :disabled="isLoadingCourses">
             <option value="">-- Chọn khóa học --</option>
             <option 
               v-for="course in courses" 
@@ -16,20 +16,26 @@
               {{ course.title }}
             </option>
           </select>
+          <p v-if="isLoadingCourses" class="loading-text">Đang tải khóa học...</p>
+          <p v-if="!isLoadingCourses && courses.length === 0" class="no-courses">Chưa có khóa học nào.</p>
         </div>
 
         <div class="form-section">
           <h2>Chọn Chương</h2>
-          <select v-model="selectedChapter" class="form-select">
+          <select v-model="selectedChapter" class="form-select" :disabled="!selectedCourse || isLoadingChapters">
             <option value="">-- Chọn chương --</option>
             <option 
-              v-for="(chapter, index) in chapters" 
-              :key="index" 
-              :value="index"
+              v-for="chapter in chapters" 
+              :key="chapter.id" 
+              :value="chapter.id"
             >
               {{ chapter.title }}
             </option>
           </select>
+          <p v-if="isLoadingChapters" class="loading-text">Đang tải chương...</p>
+          <p v-if="selectedCourse && !isLoadingChapters && chapters.length === 0" class="no-chapters">
+            Chưa có chương nào. Hãy thêm chương mới.
+          </p>
           <button 
             v-if="selectedCourse" 
             @click="showAddChapter = true" 
@@ -157,11 +163,16 @@
 </template>
 
 <script>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { courseService } from '../services/courseService'
+import { chapterService } from '../services/chapterService'
+import { documentService } from '../services/documentService'
+import { useAuth } from '../composables/useAuth'
 
 export default {
   name: 'UploadDocument',
   setup() {
+    const { isAdmin, isTeacher } = useAuth()
     const selectedCourse = ref('')
     const selectedChapter = ref('')
     const showAddChapter = ref(false)
@@ -189,22 +200,65 @@ export default {
       }
     ])
 
-    const courses = ref([
-      { id: 1, title: 'Lập Trình Web với Vue.js' },
-      { id: 2, title: 'Python Cho Người Mới Bắt Đầu' },
-      { id: 3, title: 'Thiết Kế UI/UX Chuyên Nghiệp' }
-    ])
+    const courses = ref([])
+    const chapters = ref([])
+    const isLoadingCourses = ref(false)
+    const isLoadingChapters = ref(false)
 
-    const chapters = computed(() => {
-      if (!selectedCourse.value) return []
+    const loadCourses = async () => {
+      isLoadingCourses.value = true
+      courses.value = []
+
+      try {
+        // Admin: luôn lấy tất cả khóa học đã publish (public list)
+        if (isAdmin.value) {
+          const response = await courseService.getList()
+          courses.value = Array.isArray(response) ? response : (response?.data || response?.courses || [])
+          return
+        }
+
+        // Instructor: ưu tiên my-courses, nếu rỗng hoặc lỗi thì fallback public
+        if (isTeacher.value) {
+          try {
+            const responseMy = await courseService.getMyCourses()
+            const myCourses = Array.isArray(responseMy) ? responseMy : (responseMy?.data || [])
+            if (myCourses && myCourses.length > 0) {
+              courses.value = myCourses
+              return
+            }
+          } catch (err) {
+            console.warn('getMyCourses failed or empty, fallback to public courses:', err)
+          }
+        }
+
+        // Các role khác: dùng public list
+        const response = await courseService.getList()
+        courses.value = Array.isArray(response) ? response : (response?.data || response?.courses || [])
+      } catch (error) {
+        console.error('Failed to load courses:', error)
+        courses.value = []
+      } finally {
+        isLoadingCourses.value = false
+      }
+    }
+
+    const loadChapters = async (courseId) => {
+      if (!courseId) {
+        chapters.value = []
+        return
+      }
       
-      // Mock chapters data - trong thực tế sẽ lấy từ API
-      return [
-        { title: 'Chương 1: Giới thiệu' },
-        { title: 'Chương 2: Cơ bản' },
-        { title: 'Chương 3: Nâng cao' }
-      ]
-    })
+      try {
+        isLoadingChapters.value = true
+        const response = await chapterService.getList(courseId)
+        chapters.value = Array.isArray(response) ? response : (response.data || [])
+      } catch (error) {
+        console.error('Failed to load chapters:', error)
+        chapters.value = []
+      } finally {
+        isLoadingChapters.value = false
+      }
+    }
 
     const selectedFilesCount = computed(() => {
       return Object.values(selectedFiles.value).filter(f => f !== null).length
@@ -226,36 +280,96 @@ export default {
       }
     }
 
-    const uploadFiles = () => {
+    const uploadFiles = async () => {
       if (!selectedCourse.value || !selectedChapter.value) {
         alert('Vui lòng chọn khóa học và chương!')
         return
       }
 
       const courseTitle = courses.value.find(c => c.id === selectedCourse.value)?.title
-      const chapterTitle = chapters.value[selectedChapter.value]?.title
+      const chapter = chapters.value.find(c => c.id === selectedChapter.value)
+      
+      if (!chapter) {
+        alert('Chương không hợp lệ!')
+        return
+      }
 
-      Object.entries(selectedFiles.value).forEach(([type, file]) => {
-        if (file) {
-          uploadedDocuments.value.push({
-            name: file.name,
-            type: type,
-            chapter: chapterTitle,
-            size: formatFileSize(file.size)
-          })
+      try {
+        // Upload từng file
+        for (const [type, file] of Object.entries(selectedFiles.value)) {
+          if (file) {
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('type', type.toUpperCase())
+            
+            await documentService.upload(selectedCourse.value, selectedChapter.value, formData)
+            
+            uploadedDocuments.value.push({
+              name: file.name,
+              type: type,
+              chapter: chapter.title,
+              size: formatFileSize(file.size)
+            })
+          }
         }
-      })
 
-      clearFiles()
-      alert('Upload thành công!')
+        clearFiles()
+        alert('Upload thành công!')
+      } catch (error) {
+        console.error('Failed to upload files:', error)
+        alert('Không thể upload tài liệu. Vui lòng thử lại!')
+      }
     }
 
-    const addChapter = () => {
-      if (newChapterTitle.value.trim()) {
-        // Trong thực tế sẽ call API để thêm chương
-        alert(`Đã thêm chương: ${newChapterTitle.value}`)
+    const addChapter = async () => {
+      if (!newChapterTitle.value.trim()) {
+        alert('Vui lòng nhập tên chương!')
+        return
+      }
+
+      if (!selectedCourse.value) {
+        alert('Vui lòng chọn khóa học trước!')
+        return
+      }
+
+      try {
+        isLoadingChapters.value = true
+        
+        // Lấy danh sách chương hiện tại để tính orderIndex
+        const currentChapters = chapters.value
+        const nextOrderIndex = currentChapters.length > 0 
+          ? Math.max(...currentChapters.map(c => c.orderIndex || 0)) + 1 
+          : 1
+        
+        // ChapterCreateDTO: courseId, title, orderIndex (required), description, isPublished
+        const chapterData = {
+          courseId: selectedCourse.value,
+          title: newChapterTitle.value.trim(),
+          orderIndex: nextOrderIndex,
+          description: null,
+          isPublished: false
+        }
+        
+        const response = await chapterService.create(chapterData)
+        console.log('Chapter created:', response)
+        
+        // Reload chapters
+        await loadChapters(selectedCourse.value)
+        
+        // Select chapter mới tạo
+        const newChapter = chapters.value.find(c => c.title === newChapterTitle.value.trim())
+        if (newChapter) {
+          selectedChapter.value = newChapter.id
+        }
+        
         newChapterTitle.value = ''
         showAddChapter.value = false
+        alert('Thêm chương thành công!')
+      } catch (error) {
+        console.error('Failed to create chapter:', error)
+        alert('Không thể thêm chương. Vui lòng thử lại!')
+      } finally {
+        isLoadingChapters.value = false
       }
     }
 
@@ -288,8 +402,13 @@ export default {
       return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
     }
 
-    watch(selectedCourse, () => {
+    watch(selectedCourse, (newCourseId) => {
       selectedChapter.value = ''
+      loadChapters(newCourseId)
+    })
+
+    onMounted(() => {
+      loadCourses()
     })
 
     return {
@@ -301,6 +420,8 @@ export default {
       uploadedDocuments,
       courses,
       chapters,
+      isLoadingCourses,
+      isLoadingChapters,
       selectedFilesCount,
       handleFileSelect,
       clearFiles,

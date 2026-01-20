@@ -51,17 +51,29 @@ export default {
     const password = ref('')
     const error = ref('')
 
-    const handleLogin = () => {
+    const handleLogin = async () => {
       error.value = ''
       if (!username.value || !password.value) {
         error.value = 'Vui lòng nhập đầy đủ thông tin!'
         return
       }
       
-      if (login(username.value, password.value)) {
-        router.push('/')
-      } else {
-        error.value = 'Tên đăng nhập hoặc mật khẩu không đúng!'
+      try {
+        const success = await login(username.value, password.value)
+        if (success) {
+          router.push('/')
+        } else {
+          error.value = 'Tên đăng nhập hoặc mật khẩu không đúng!'
+        }
+      } catch (err) {
+        console.error('Login error:', err)
+        if (err.status === 403) {
+          error.value = 'Lỗi 403: Backend từ chối request. Kiểm tra cấu hình CORS!'
+        } else if (err.status === 0 || err.message?.includes('CORS')) {
+          error.value = 'Lỗi CORS: Không thể kết nối đến backend. Đảm bảo backend đang chạy ở port 8080 và đã cấu hình CORS!'
+        } else {
+          error.value = `Lỗi: ${err.message || 'Không thể đăng nhập. Vui lòng thử lại!'}`
+        }
       }
     }
 
