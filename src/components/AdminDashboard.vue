@@ -40,26 +40,16 @@
             <h3>Upload Tài Liệu</h3>
             <p>Upload tài liệu cho các khóa học</p>
           </router-link>
-          <div class="action-card">
+          <router-link to="/admin/users" class="action-card">
             <div class="action-icon">👥</div>
-            <h3>Quản Lý Học Viên</h3>
-            <p>Xem danh sách và quản lý học viên</p>
-          </div>
-          <div class="action-card">
+            <h3>Quản Lý Người Dùng</h3>
+            <p>Xem danh sách và quản lý người dùng</p>
+          </router-link>
+          <router-link to="/admin/orders" class="action-card">
             <div class="action-icon">💰</div>
             <h3>Quản Lý Đơn Hàng</h3>
             <p>Xem và xử lý đơn hàng</p>
-          </div>
-          <div class="action-card">
-            <div class="action-icon">📊</div>
-            <h3>Báo Cáo Thống Kê</h3>
-            <p>Xem báo cáo và thống kê chi tiết</p>
-          </div>
-          <div class="action-card">
-            <div class="action-icon">⚙️</div>
-            <h3>Cài Đặt</h3>
-            <p>Cấu hình hệ thống</p>
-          </div>
+          </router-link>
         </div>
       </div>
 

@@ -7,6 +7,10 @@ export const documentService = {
       return await httpClient.upload(API_ENDPOINTS.DOCUMENTS.UPLOAD(courseId, chapterId), formData)
     } catch (error) {
       console.error('Upload document error:', error)
+      // Nếu 404 thì báo rõ API chưa có trong backend/Swagger
+      if (error.status === 404) {
+        throw { ...error, message: 'API upload tài liệu chưa có trong backend/Swagger (404)' }
+      }
       throw error
     }
   },

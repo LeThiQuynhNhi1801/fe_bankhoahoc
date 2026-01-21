@@ -10,6 +10,9 @@ import OrderSuccess from './components/OrderSuccess.vue'
 import Login from './components/Login.vue'
 import Signup from './components/Signup.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
+import AdminUsers from './components/AdminUsers.vue'
+import AdminOrders from './components/AdminOrders.vue'
+import AdminCourses from './components/AdminCourses.vue'
 import UploadDocument from './components/UploadDocument.vue'
 import CreateCourse from './components/CreateCourse.vue'
 import { useAuth } from './composables/useAuth'
@@ -26,6 +29,21 @@ const routes = [
   { 
     path: '/admin', 
     component: AdminDashboard,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  { 
+    path: '/admin/users', 
+    component: AdminUsers,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  { 
+    path: '/admin/orders', 
+    component: AdminOrders,
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  { 
+    path: '/admin/courses', 
+    component: AdminCourses,
     meta: { requiresAuth: true, requiresAdmin: true }
   },
   { 

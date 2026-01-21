@@ -173,8 +173,8 @@ export default {
   name: 'UploadDocument',
   setup() {
     const { isAdmin, isTeacher } = useAuth()
-    const selectedCourse = ref('')
-    const selectedChapter = ref('')
+    const selectedCourse = ref(null)
+    const selectedChapter = ref(null)
     const showAddChapter = ref(false)
     const newChapterTitle = ref('')
     
@@ -185,20 +185,8 @@ export default {
       video: null
     })
 
-    const uploadedDocuments = ref([
-      {
-        name: 'Bai-giang-chuong-1.pdf',
-        type: 'pdf',
-        chapter: 'Chương 1: Giới thiệu',
-        size: '2.5 MB'
-      },
-      {
-        name: 'Video-bai-1.mp4',
-        type: 'video',
-        chapter: 'Chương 1: Giới thiệu',
-        size: '125 MB'
-      }
-    ])
+    // Danh sách tài liệu đã upload (sẽ lấy từ API khi có endpoint)
+    const uploadedDocuments = ref([])
 
     const courses = ref([])
     const chapters = ref([])
@@ -243,15 +231,21 @@ export default {
     }
 
     const loadChapters = async (courseId) => {
-      if (!courseId) {
+      const courseIdNum = courseId ? parseInt(courseId) : null
+      if (!courseIdNum) {
         chapters.value = []
         return
       }
       
       try {
         isLoadingChapters.value = true
-        const response = await chapterService.getList(courseId)
-        chapters.value = Array.isArray(response) ? response : (response.data || [])
+        const response = await chapterService.getList(courseIdNum)
+        const normalize = (res) => {
+          if (Array.isArray(res)) return res
+          return res?.data || res?.content || []
+        }
+        chapters.value = normalize(response)
+        console.log('[UploadDocument] chapters loaded:', chapters.value?.length, 'for course', courseIdNum)
       } catch (error) {
         console.error('Failed to load chapters:', error)
         chapters.value = []
@@ -286,8 +280,10 @@ export default {
         return
       }
 
-      const courseTitle = courses.value.find(c => c.id === selectedCourse.value)?.title
-      const chapter = chapters.value.find(c => c.id === selectedChapter.value)
+      const courseIdNum = parseInt(selectedCourse.value)
+      const chapterIdNum = parseInt(selectedChapter.value)
+      const courseTitle = courses.value.find(c => c.id === courseIdNum)?.title
+      const chapter = chapters.value.find(c => c.id === chapterIdNum)
       
       if (!chapter) {
         alert('Chương không hợp lệ!')
@@ -295,21 +291,30 @@ export default {
       }
 
       try {
-        // Upload từng file
+        // Upload từng file (nếu backend có hỗ trợ). Nếu 404 => thông báo API chưa có.
         for (const [type, file] of Object.entries(selectedFiles.value)) {
           if (file) {
             const formData = new FormData()
             formData.append('file', file)
             formData.append('type', type.toUpperCase())
             
-            await documentService.upload(selectedCourse.value, selectedChapter.value, formData)
-            
-            uploadedDocuments.value.push({
-              name: file.name,
-              type: type,
-              chapter: chapter.title,
-              size: formatFileSize(file.size)
-            })
+            try {
+              await documentService.upload(courseIdNum, chapterIdNum, formData)
+              
+              // Chưa có API trả danh sách, nên chỉ push tạm vào local state
+              uploadedDocuments.value.push({
+                name: file.name,
+                type: type,
+                chapter: chapter.title,
+                size: formatFileSize(file.size)
+              })
+            } catch (err) {
+              if (err.status === 404) {
+                alert('API upload tài liệu chưa có trong Swagger/backend. Vui lòng kiểm tra backend.')
+                throw err
+              }
+              throw err
+            }
           }
         }
 
@@ -403,7 +408,7 @@ export default {
     }
 
     watch(selectedCourse, (newCourseId) => {
-      selectedChapter.value = ''
+      selectedChapter.value = null
       loadChapters(newCourseId)
     })
 

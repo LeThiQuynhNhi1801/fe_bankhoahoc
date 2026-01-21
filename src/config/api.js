@@ -76,7 +76,24 @@ export const API_ENDPOINTS = {
   
   // Admin
   ADMIN: {
-    STATS: getApiPath('/api/admin/stats')
+    STATS: getApiPath('/api/admin/stats'),
+    STATISTICS: getApiPath('/api/admin/statistics'),
+    // Users management
+    USERS: getApiPath('/api/admin/users'),
+    USER_DETAIL: (userId) => getApiPath(`/api/admin/users/${userId}`),
+    DELETE_USER: (userId) => getApiPath(`/api/admin/users/${userId}`),
+    TOGGLE_USER_STATUS: (userId) => getApiPath(`/api/admin/users/${userId}/toggle-status`),
+    UPDATE_USER_ROLE: (userId) => getApiPath(`/api/admin/users/${userId}/role`),
+    // Orders management
+    ORDERS: getApiPath('/api/admin/orders'),
+    ORDER_DETAIL: (orderId) => getApiPath(`/api/admin/orders/${orderId}`),
+    ORDERS_BY_STATUS: (status) => getApiPath(`/api/admin/orders/status/${status}`),
+    UPDATE_ORDER_STATUS: (orderId) => getApiPath(`/api/admin/orders/${orderId}/status`),
+    CONFIRM_ORDER: (orderId) => getApiPath(`/api/admin/orders/${orderId}/confirm`),
+    CANCEL_ORDER: (orderId) => getApiPath(`/api/admin/orders/${orderId}/cancel`),
+    // Courses management
+    COURSES: getApiPath('/api/admin/courses'),
+    DELETE_COURSE: (courseId) => getApiPath(`/api/admin/courses/${courseId}`)
   },
   
   // Enrollments

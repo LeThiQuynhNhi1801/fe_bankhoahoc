@@ -36,5 +36,7 @@ export const orderService = {
       console.error('Update order status error:', error)
       throw error
     }
-  }
+  },
+
+  // NOTE: Admin order APIs dùng `adminService` (src/services/adminService.js)
 }

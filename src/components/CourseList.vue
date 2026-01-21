@@ -88,14 +88,22 @@ export default {
         error.value = null
         
         // Nếu có category được chọn, load courses theo category
+        const normalizeCourses = (response) => {
+          if (Array.isArray(response)) return response
+          return response?.data || response?.courses || response?.content || []
+        }
+
         if (selectedCategory.value) {
           const response = await courseService.getByCategory(selectedCategory.value)
-          allCourses.value = Array.isArray(response) ? response : (response.data || [])
+          console.log('[CourseList] getByCategory response:', response)
+          allCourses.value = normalizeCourses(response)
         } else {
-          // Load tất cả courses
           const response = await courseService.getList()
-          allCourses.value = Array.isArray(response) ? response : (response.data || response.courses || [])
+          console.log('[CourseList] getList response:', response)
+          allCourses.value = normalizeCourses(response)
         }
+
+        console.log('[CourseList] loaded courses:', allCourses.value?.length)
       } catch (err) {
         console.error('Failed to load courses:', err)
         error.value = 'Không thể tải danh sách khóa học. Vui lòng thử lại sau.'

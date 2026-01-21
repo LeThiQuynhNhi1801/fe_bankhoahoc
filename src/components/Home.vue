@@ -83,8 +83,8 @@ export default {
       try {
         isLoading.value = true
         const response = await courseService.getList()
-        // Lấy 4 khóa học đầu tiên làm featured
-        const courses = Array.isArray(response) ? response : (response.data || response.courses || [])
+        console.log('[Home] getList response:', response)
+        const courses = Array.isArray(response) ? response : (response.data || response.courses || response.content || [])
         featuredCourses.value = courses.slice(0, 4).map(course => ({
           id: course.id,
           title: course.title,

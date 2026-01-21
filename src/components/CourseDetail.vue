@@ -71,16 +71,67 @@
           </div>
 
           <div v-if="activeTab === 'curriculum'" class="tab-panel">
-            <h2>Nội Dung Khóa Học</h2>
+            <div class="curriculum-header">
+              <h2>Nội Dung Khóa Học</h2>
+              <button 
+                v-if="canManageCourse"
+                @click="showAddChapterForm = !showAddChapterForm"
+                class="btn btn-primary btn-small"
+              >
+                {{ showAddChapterForm ? 'Hủy' : '+ Thêm Chương Mới' }}
+              </button>
+            </div>
+
+            <!-- Form thêm chương mới -->
+            <div v-if="showAddChapterForm && canManageCourse" class="add-chapter-form">
+              <h3>Thêm Chương Mới</h3>
+              <div class="form-group">
+                <label>Tên Chương *</label>
+                <input 
+                  v-model="newChapter.title" 
+                  type="text" 
+                  placeholder="Nhập tên chương"
+                  class="form-input"
+                />
+              </div>
+              <div class="form-group">
+                <label>Mô Tả</label>
+                <textarea 
+                  v-model="newChapter.description" 
+                  rows="3"
+                  placeholder="Nhập mô tả chương (tùy chọn)"
+                  class="form-textarea"
+                ></textarea>
+              </div>
+              <div class="form-group">
+                <label>
+                  <input 
+                    v-model="newChapter.isPublished" 
+                    type="checkbox"
+                  />
+                  Public ngay sau khi tạo
+                </label>
+              </div>
+              <div class="form-actions">
+                <button @click="addNewChapter" class="btn btn-primary" :disabled="isAddingChapter">
+                  {{ isAddingChapter ? 'Đang thêm...' : 'Thêm Chương' }}
+                </button>
+                <button @click="cancelAddChapter" class="btn btn-secondary">Hủy</button>
+              </div>
+            </div>
+
             <div class="curriculum">
               <div 
                 v-for="(chapter, chapterIndex) in course.chapters" 
-                :key="chapterIndex"
+                :key="chapter.id || chapterIndex"
                 class="curriculum-chapter"
               >
                 <div class="chapter-header" @click="toggleChapter(chapterIndex)">
                   <h3>{{ chapter.title }}</h3>
-                  <span class="chapter-toggle">{{ expandedChapters[chapterIndex] ? '▼' : '▶' }}</span>
+                  <div class="chapter-actions">
+                    <span class="chapter-order">Chương {{ chapter.orderIndex || (chapterIndex + 1) }}</span>
+                    <span class="chapter-toggle">{{ expandedChapters[chapterIndex] ? '▼' : '▶' }}</span>
+                  </div>
                 </div>
                 
                 <div v-if="expandedChapters[chapterIndex]" class="chapter-content">
@@ -175,10 +226,11 @@
 </template>
 
 <script>
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { courseService } from '../services/courseService'
 import { chapterService } from '../services/chapterService'
+import { useAuth } from '../composables/useAuth'
 
 export default {
   name: 'CourseDetail',
@@ -192,17 +244,29 @@ export default {
   setup(props, { emit }) {
     const route = useRoute()
     const router = useRouter()
+    const { isAdmin, isTeacher } = useAuth()
     const course = ref(null)
     const activeTab = ref('overview')
     const expandedChapters = reactive({})
     const isLoading = ref(false)
     const error = ref(null)
+    const showAddChapterForm = ref(false)
+    const isAddingChapter = ref(false)
+    const newChapter = reactive({
+      title: '',
+      description: '',
+      isPublished: false
+    })
 
     const tabs = [
       { id: 'overview', label: 'Tổng Quan' },
       { id: 'curriculum', label: 'Nội Dung' },
       { id: 'reviews', label: 'Đánh Giá' }
     ]
+
+    const canManageCourse = computed(() => {
+      return isAdmin.value || isTeacher.value
+    })
 
 
     const loadCourse = async () => {
@@ -274,14 +338,97 @@ export default {
     }
 
     const addToCart = async () => {
+      // Kiểm tra token trước
+      const token = localStorage.getItem('token')
+      if (!token) {
+        alert('Vui lòng đăng nhập để thêm khóa học vào giỏ hàng!')
+        router.push('/login')
+        return
+      }
+
       try {
+        // Thử gọi API cart trước
         const { cartService } = await import('../services/cartService')
         await cartService.addItem(course.value.id)
         emit('add-to-cart')
         alert('Đã thêm vào giỏ hàng!')
       } catch (error) {
-        console.error('Failed to add to cart:', error)
-        alert('Không thể thêm vào giỏ hàng. Vui lòng đăng nhập!')
+        console.error('Failed to add to cart via API:', error)
+        console.error('Error details:', {
+          status: error.status,
+          statusText: error.statusText,
+          data: error.data
+        })
+        
+        // Nếu API cart không tồn tại (404) hoặc lỗi khác, dùng localStorage làm fallback
+        if (error.status === 404 || error.status === 500) {
+          console.log('Cart API not available, using localStorage fallback')
+          try {
+            // Lấy cart từ localStorage
+            let cart = JSON.parse(localStorage.getItem('cart') || '[]')
+            
+            // Kiểm tra xem course đã có trong cart chưa (kiểm tra cả ID và courseId)
+            const courseId = course.value.id
+            const existingIndex = cart.findIndex(item => {
+              if (typeof item === 'number' || typeof item === 'string') {
+                return parseInt(item) === courseId
+              }
+              return (item.id === courseId || item.courseId === courseId)
+            })
+            
+            if (existingIndex === -1) {
+              // Thêm course object đầy đủ vào cart
+              const courseItem = {
+                id: course.value.id,
+                courseId: course.value.id,
+                title: course.value.title,
+                price: course.value.price || 0,
+                thumbnail: course.value.thumbnail,
+                image: course.value.thumbnail || course.value.image || '/placeholder-course.jpg',
+                quantity: 1
+              }
+              cart.push(courseItem)
+              localStorage.setItem('cart', JSON.stringify(cart))
+              emit('add-to-cart')
+              alert('Đã thêm vào giỏ hàng!')
+            } else {
+              // Nếu đã có, tăng quantity nếu là object, hoặc convert sang object
+              if (typeof cart[existingIndex] === 'object') {
+                cart[existingIndex].quantity = (cart[existingIndex].quantity || 1) + 1
+                localStorage.setItem('cart', JSON.stringify(cart))
+                emit('add-to-cart')
+                alert('Đã cập nhật số lượng trong giỏ hàng!')
+              } else {
+                // Convert ID thành object
+                const courseItem = {
+                  id: course.value.id,
+                  courseId: course.value.id,
+                  title: course.value.title,
+                  price: course.value.price || 0,
+                  thumbnail: course.value.thumbnail,
+                  image: course.value.thumbnail || course.value.image || '/placeholder-course.jpg',
+                  quantity: 2
+                }
+                cart[existingIndex] = courseItem
+                localStorage.setItem('cart', JSON.stringify(cart))
+                emit('add-to-cart')
+                alert('Đã cập nhật số lượng trong giỏ hàng!')
+              }
+            }
+          } catch (localError) {
+            console.error('Failed to add to localStorage cart:', localError)
+            alert('Không thể thêm vào giỏ hàng. Vui lòng thử lại!')
+          }
+        } else if (error.status === 401) {
+          alert('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!')
+          router.push('/login')
+        } else if (error.status === 403) {
+          alert('Bạn không có quyền thêm vào giỏ hàng.')
+        } else if (error.data?.message) {
+          alert(`Lỗi: ${error.data.message}`)
+        } else {
+          alert('Không thể thêm vào giỏ hàng. Vui lòng thử lại!')
+        }
       }
     }
 
@@ -290,6 +437,62 @@ export default {
       router.push('/checkout')
     }
 
+    const addNewChapter = async () => {
+      if (!newChapter.title || !newChapter.title.trim()) {
+        alert('Vui lòng nhập tên chương!')
+        return
+      }
+
+      if (!course.value || !course.value.id) {
+        alert('Không tìm thấy thông tin khóa học!')
+        return
+      }
+
+      try {
+        isAddingChapter.value = true
+        
+        // Tính orderIndex: lấy max orderIndex hiện tại + 1
+        const currentChapters = course.value.chapters || []
+        const maxOrderIndex = currentChapters.length > 0
+          ? Math.max(...currentChapters.map(c => c.orderIndex || 0))
+          : 0
+        const nextOrderIndex = maxOrderIndex + 1
+
+        // ChapterCreateDTO: courseId, title, orderIndex (required), description, isPublished
+        const chapterData = {
+          courseId: course.value.id,
+          title: newChapter.title.trim(),
+          orderIndex: nextOrderIndex,
+          description: newChapter.description?.trim() || null,
+          isPublished: newChapter.isPublished || false
+        }
+
+        await chapterService.create(chapterData)
+        
+        // Reset form
+        newChapter.title = ''
+        newChapter.description = ''
+        newChapter.isPublished = false
+        showAddChapterForm.value = false
+
+        // Reload course để lấy danh sách chương mới
+        await loadCourse()
+        
+        alert('Thêm chương thành công!')
+      } catch (error) {
+        console.error('Failed to add chapter:', error)
+        alert('Không thể thêm chương. Vui lòng kiểm tra quyền (INSTRUCTOR/ADMIN) và thử lại!')
+      } finally {
+        isAddingChapter.value = false
+      }
+    }
+
+    const cancelAddChapter = () => {
+      newChapter.title = ''
+      newChapter.description = ''
+      newChapter.isPublished = false
+      showAddChapterForm.value = false
+    }
 
     return {
       course,
@@ -298,6 +501,10 @@ export default {
       expandedChapters,
       isLoading,
       error,
+      canManageCourse,
+      showAddChapterForm,
+      newChapter,
+      isAddingChapter,
       loadCourse,
       toggleChapter,
       getDocumentIcon,
@@ -305,8 +512,272 @@ export default {
       playVideo,
       formatPrice,
       addToCart,
-      buyNow
+      buyNow,
+      addNewChapter,
+      cancelAddChapter
     }
   }
 }
 </script>
+
+<style scoped>
+.curriculum-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.curriculum-header h2 {
+  margin: 0;
+}
+
+.btn-small {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.add-chapter-form {
+  background: #f9fafb;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  border: 1px solid #e5e7eb;
+}
+
+.add-chapter-form h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border-color 0.3s;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: #4F46E5;
+}
+
+.form-textarea {
+  resize: vertical;
+}
+
+.form-group input[type="checkbox"] {
+  margin-right: 0.5rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.curriculum {
+  margin-top: 1rem;
+}
+
+.curriculum-chapter {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.chapter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  background: #f9fafb;
+  transition: background 0.2s;
+}
+
+.chapter-header:hover {
+  background: #f3f4f6;
+}
+
+.chapter-header h3 {
+  margin: 0;
+  flex: 1;
+  color: #333;
+}
+
+.chapter-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.chapter-order {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.chapter-toggle {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.chapter-content {
+  padding: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.chapter-section {
+  margin-bottom: 1.5rem;
+}
+
+.chapter-section:last-child {
+  margin-bottom: 0;
+}
+
+.chapter-section h4 {
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.lessons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lesson-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.lesson-number {
+  font-weight: 600;
+  color: #4F46E5;
+  min-width: 30px;
+}
+
+.lesson-title {
+  flex: 1;
+  color: #333;
+}
+
+.lesson-duration {
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.documents-grid,
+.videos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.document-item,
+.video-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.document-icon,
+.video-icon {
+  font-size: 2rem;
+}
+
+.document-info,
+.video-info {
+  flex: 1;
+}
+
+.document-name,
+.video-name {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 0.25rem;
+}
+
+.document-meta,
+.video-meta {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.btn-download,
+.btn-play {
+  padding: 0.5rem 1rem;
+  background: #4F46E5;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background 0.3s;
+}
+
+.btn-download:hover,
+.btn-play:hover {
+  background: #4338ca;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-primary {
+  background: #4F46E5;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.btn-primary:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #6b7280;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #4b5563;
+}
+</style>
