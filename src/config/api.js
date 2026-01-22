@@ -29,17 +29,48 @@ export const API_ENDPOINTS = {
   // Chapters
   CHAPTERS: {
     LIST: (courseId) => getApiPath(`/api/chapters/course/${courseId}`),
+    LIST_BY_COURSE: (courseId) => getApiPath(`/api/courses/${courseId}/chapters`), // Alternative endpoint
     CREATE: getApiPath('/api/chapters'),
+    CREATE_BY_COURSE: (courseId) => getApiPath(`/api/courses/${courseId}/chapters`), // Alternative endpoint
     GET: (id) => getApiPath(`/api/chapters/${id}`),
     UPDATE: (id) => getApiPath(`/api/chapters/${id}`),
     DELETE: (id) => getApiPath(`/api/chapters/${id}`)
   },
   
-  // Documents
+  // Documents API - riêng biệt với Videos
+  // Documents được upload trực tiếp vào chapter (PDF, Word, Excel, etc.)
   DOCUMENTS: {
-    UPLOAD: (courseId, chapterId) => getApiPath(`/api/courses/${courseId}/chapters/${chapterId}/documents`),
-    DELETE: (courseId, chapterId, docId) => getApiPath(`/api/courses/${courseId}/chapters/${chapterId}/documents/${docId}`),
-    DOWNLOAD: (courseId, chapterId, docId) => getApiPath(`/api/courses/${courseId}/chapters/${chapterId}/documents/${docId}/download`)
+    UPLOAD: (chapterId) => getApiPath(`/api/chapters/${chapterId}/documents`),
+    // Note: Có thể không có DELETE/DOWNLOAD endpoints riêng, cần kiểm tra Swagger
+  },
+  
+  // Files API - để tải và xem file
+  FILES: {
+    DOWNLOAD: getApiPath('/api/files/download'), // Admin/Instructor only
+    GET_CHAPTER_DOCUMENT: (chapterId) => getApiPath(`/api/files/chapters/${chapterId}/document`) // Student only
+  },
+  
+  // Learning API - dành cho học viên
+  LEARNING: {
+    GET_COURSE_CHAPTERS: (courseId) => getApiPath(`/api/learning/courses/${courseId}/chapters`),
+    GET_CHAPTER_DETAIL: (chapterId) => getApiPath(`/api/learning/chapters/${chapterId}`),
+    GET_CHAPTER_CONTENTS: (chapterId) => getApiPath(`/api/learning/chapters/${chapterId}/contents`),
+    GET_CONTENT_DETAIL: (contentId) => getApiPath(`/api/learning/contents/${contentId}`)
+  },
+  
+  // Course Content API - quản lý nội dung (Admin/Instructor)
+  COURSE_CONTENTS: {
+    GET: (contentId) => getApiPath(`/api/course-contents/${contentId}`),
+    GET_BY_CHAPTER: (chapterId) => getApiPath(`/api/course-contents/chapters/${chapterId}`),
+    CREATE: (chapterId) => getApiPath(`/api/course-contents/chapters/${chapterId}`),
+    UPDATE: (contentId) => getApiPath(`/api/course-contents/${contentId}`),
+    DELETE: (contentId) => getApiPath(`/api/course-contents/${contentId}`)
+  },
+  
+  // Videos API - riêng biệt với Documents
+  // Videos được upload vào course-content (nội dung học tập)
+  VIDEOS: {
+    UPLOAD: (contentId) => getApiPath(`/api/course-contents/${contentId}/video`)
   },
   
   // Orders

@@ -15,6 +15,8 @@ import AdminOrders from './components/AdminOrders.vue'
 import AdminCourses from './components/AdminCourses.vue'
 import UploadDocument from './components/UploadDocument.vue'
 import CreateCourse from './components/CreateCourse.vue'
+import MyCourses from './components/MyCourses.vue'
+import CourseLearning from './components/CourseLearning.vue'
 import { useAuth } from './composables/useAuth'
 
 const routes = [
@@ -26,6 +28,17 @@ const routes = [
   { path: '/order-success', component: OrderSuccess },
   { path: '/login', component: Login },
   { path: '/signup', component: Signup },
+  { 
+    path: '/my-courses', 
+    component: MyCourses,
+    meta: { requiresAuth: true }
+  },
+  { 
+    path: '/learning/:id', 
+    component: CourseLearning,
+    props: true,
+    meta: { requiresAuth: true }
+  },
   { 
     path: '/admin', 
     component: AdminDashboard,

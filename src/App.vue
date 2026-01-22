@@ -9,6 +9,7 @@
           <nav class="nav">
             <router-link to="/">Trang Chủ</router-link>
             <router-link to="/courses">Khóa Học</router-link>
+            <router-link v-if="isAuthenticated" to="/my-courses">Khóa Học Của Tôi</router-link>
             <router-link to="/cart" class="cart-link">
               Giỏ Hàng
               <span v-if="cartCount > 0" class="cart-badge">{{ cartCount }}</span>

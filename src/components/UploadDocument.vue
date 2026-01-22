@@ -167,6 +167,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { courseService } from '../services/courseService'
 import { chapterService } from '../services/chapterService'
 import { documentService } from '../services/documentService'
+import { videoService } from '../services/videoService'
 import { useAuth } from '../composables/useAuth'
 
 export default {
@@ -291,17 +292,37 @@ export default {
       }
 
       try {
-        // Upload từng file (nếu backend có hỗ trợ). Nếu 404 => thông báo API chưa có.
-        for (const [type, file] of Object.entries(selectedFiles.value)) {
-          if (file) {
+        // Tách riêng documents và videos - QUAN TRỌNG: Video là API riêng!
+        const documentFiles = {}
+        const videoFile = selectedFiles.value.video
+        
+        // Lấy các file documents (word, excel, pdf) - KHÔNG BAO GỒM VIDEO
+        // VIDEO KHÔNG BAO GIỜ được thêm vào documentFiles!
+        if (selectedFiles.value.word) documentFiles.word = selectedFiles.value.word
+        if (selectedFiles.value.excel) documentFiles.excel = selectedFiles.value.excel
+        if (selectedFiles.value.pdf) documentFiles.pdf = selectedFiles.value.pdf
+        
+        // Đảm bảo video KHÔNG có trong documentFiles
+        if (documentFiles.video) {
+          delete documentFiles.video
+        }
+        
+        console.log('[Upload] Documents to upload:', Object.keys(documentFiles))
+        console.log('[Upload] Video to upload:', videoFile ? videoFile.name : 'none')
+        console.log('[Upload] Video sẽ KHÔNG đi qua document API!')
+        
+        // Upload documents vào chapter - API: POST /api/chapters/{chapterId}/documents
+        // CHỈ upload word, excel, pdf - KHÔNG BAO GỒM VIDEO
+        for (const [type, file] of Object.entries(documentFiles)) {
+          if (file && type !== 'video') { // Đảm bảo video không đi qua đây
             const formData = new FormData()
             formData.append('file', file)
             formData.append('type', type.toUpperCase())
             
             try {
-              await documentService.upload(courseIdNum, chapterIdNum, formData)
+              console.log(`[Upload] Uploading document ${type} to chapter ${chapterIdNum} via /api/chapters/${chapterIdNum}/documents`)
+              await documentService.upload(chapterIdNum, formData)
               
-              // Chưa có API trả danh sách, nên chỉ push tạm vào local state
               uploadedDocuments.value.push({
                 name: file.name,
                 type: type,
@@ -309,20 +330,114 @@ export default {
                 size: formatFileSize(file.size)
               })
             } catch (err) {
-              if (err.status === 404) {
-                alert('API upload tài liệu chưa có trong Swagger/backend. Vui lòng kiểm tra backend.')
-                throw err
-              }
+              console.error(`Upload document ${type} error:`, err)
+              alert(`Không thể upload ${type}. Vui lòng thử lại!`)
               throw err
             }
           }
+        }
+        
+        // Upload video - CHỈ GỌI API VIDEO: POST /api/course-contents/{contentId}/video
+        // NẾU LÀ VIDEO → GỌI API /video, KHÔNG GỌI /chapters
+        if (videoFile) {
+          try {
+            console.log('[Upload] ===== VIDEO FILE DETECTED - GỌI API VIDEO =====')
+            console.log('[Upload] Video file:', videoFile.name)
+            
+            // TẠO CONTENT TRƯỚC ĐỂ LẤY contentId (API cần contentId)
+            const { courseContentService } = await import('../services/courseContentService')
+            
+            // Lấy contents để tính orderIndex
+            const existingContents = await courseContentService.getByChapter(chapterIdNum)
+            const contents = Array.isArray(existingContents?.data ?? existingContents) 
+              ? (existingContents?.data ?? existingContents) 
+              : []
+            const nextOrderIndex = contents.length > 0 
+              ? Math.max(...contents.map(c => c.orderIndex || 0)) + 1 
+              : 1
+            
+            // Tạo title - NẾU RỖNG THÌ FIX CỨNG "title1"
+            let title = videoFile.name
+            const dotIndex = title.lastIndexOf('.')
+            if (dotIndex > 0) {
+              title = title.substring(0, dotIndex)
+            }
+            title = title.trim()
+            // Nếu title rỗng thì fix cứng "title1" để tránh lỗi 400
+            if (!title || title.length === 0) {
+              title = 'title1'
+            }
+            
+            // TẠO CONTENT (API /chapters - chỉ để lấy ID)
+            // Đảm bảo tất cả các field đều có giá trị hợp lệ
+            const contentData = {
+              chapterId: Number(chapterIdNum),
+              title: String(title).trim() || 'title1', // Đảm bảo title là string và không rỗng
+              description: String(`Video: ${videoFile.name}`).trim(),
+              orderIndex: Number(nextOrderIndex),
+              isPreview: Boolean(false)
+            }
+            
+            // Validate title trước khi gửi - nếu vẫn rỗng thì fix cứng "title1"
+            if (!contentData.title || typeof contentData.title !== 'string' || contentData.title.trim().length === 0) {
+              contentData.title = 'title1'
+            }
+            
+            // Đảm bảo title không null/undefined
+            contentData.title = contentData.title || 'title1'
+            
+            console.log('[Upload] Tạo content với title:', contentData.title, 'Type:', typeof contentData.title, 'Length:', contentData.title.length)
+            console.log('[Upload] ContentData:', JSON.stringify(contentData))
+            console.log('[Upload] ContentData title check:', {
+              hasTitle: !!contentData.title,
+              titleValue: contentData.title,
+              titleType: typeof contentData.title,
+              titleLength: contentData.title?.length
+            })
+            const contentRes = await courseContentService.create(chapterIdNum, contentData)
+            const content = contentRes?.data ?? contentRes
+            
+            if (!content?.id) {
+              throw new Error('Không tạo được content')
+            }
+            
+            console.log('[Upload] ✅ ContentId:', content.id)
+            
+            // UPLOAD VIDEO - GỌI API VIDEO (API TRÊN)
+            console.log(`[Upload] ===== GỌI API VIDEO: POST /api/course-contents/${content.id}/video =====`)
+            
+            const formData = new FormData()
+            formData.append('file', videoFile)
+            
+            await videoService.upload(content.id, formData)
+            console.log('[Upload] ✅✅✅ VIDEO UPLOADED VIA API /video!')
+            
+            uploadedDocuments.value.push({
+              name: videoFile.name,
+              type: 'video',
+              chapter: chapter.title,
+              size: formatFileSize(videoFile.size),
+              contentId: content.id
+            })
+            
+            console.log('[Upload] ✅ Video uploaded successfully via API TRÊN (VIDEO UPLOAD API)')
+          } catch (err) {
+            console.error('[Upload] ❌ Upload video error:', err)
+            console.error('[Upload] Error stack:', err.stack)
+            // Không alert ở đây, để catch ngoài xử lý
+            throw err
+          }
+        } else {
+          console.log('[Upload] ⚠️ Không có video file để upload')
         }
 
         clearFiles()
         alert('Upload thành công!')
       } catch (error) {
         console.error('Failed to upload files:', error)
-        alert('Không thể upload tài liệu. Vui lòng thử lại!')
+        // Chỉ alert 1 lần ở đây
+        const errorMessage = error?.message || 'Không thể upload tài liệu. Vui lòng thử lại!'
+        alert(errorMessage)
       }
     }
 

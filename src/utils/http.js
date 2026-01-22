@@ -85,11 +85,25 @@ class HttpClient {
       }
 
       if (!response.ok) {
-        throw {
+        const error = {
           status: response.status,
           statusText: response.statusText,
-          data
+          data,
+          response: {
+            status: response.status,
+            statusText: response.statusText,
+            data
+          }
         }
+        // Add message if available
+        if (data?.message) {
+          error.message = data.message
+        } else if (typeof data === 'string') {
+          error.message = data
+        } else {
+          error.message = `HTTP ${response.status}: ${response.statusText}`
+        }
+        throw error
       }
 
       if (ENABLE_DEBUG) {
