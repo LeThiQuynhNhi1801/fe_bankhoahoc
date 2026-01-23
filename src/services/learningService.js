@@ -3,9 +3,11 @@ import { API_ENDPOINTS } from '../config/api'
 
 export const learningService = {
   /**
-   * Lấy danh sách chương của khóa học đã mua
+   * Lấy danh sách chương của khóa học
+   * API: GET /api/chapters/course/{courseId}
+   * - Ai cũng có thể xem, nhưng chỉ học viên đã mua mới thấy nội dung chi tiết
    * @param {number} courseId - ID của khóa học
-   * @returns {Promise} Danh sách chapters với đầy đủ nội dung
+   * @returns {Promise} Danh sách chapters (với đầy đủ nội dung nếu đã mua)
    */
   async getCourseChapters(courseId) {
     try {
@@ -18,8 +20,10 @@ export const learningService = {
 
   /**
    * Lấy chi tiết chương để học
+   * API: GET /api/chapters/{id}
+   * - Nếu đã mua khóa học sẽ thấy đầy đủ nội dung, nếu chưa chỉ thấy thông tin cơ bản
    * @param {number} chapterId - ID của chương
-   * @returns {Promise} Chi tiết chapter với contents
+   * @returns {Promise} Chi tiết chapter với contents (nếu đã mua)
    */
   async getChapterDetail(chapterId) {
     try {
@@ -31,9 +35,10 @@ export const learningService = {
   },
 
   /**
-   * Lấy danh sách nội dung của chương
+   * Lấy danh sách tài liệu/nội dung của chương (cho học viên)
+   * API: GET /api/learning/chapters/{chapterId}/contents
    * @param {number} chapterId - ID của chương
-   * @returns {Promise} Danh sách contents (videos, bài giảng)
+   * @returns {Promise} Danh sách contents (tài liệu, videos)
    */
   async getChapterContents(chapterId) {
     try {
@@ -46,6 +51,7 @@ export const learningService = {
 
   /**
    * Lấy chi tiết nội dung học (video, bài giảng)
+   * API: GET /api/course-contents/{contentId}
    * @param {number} contentId - ID của content
    * @returns {Promise} Chi tiết content với videoUrl, description, etc.
    */

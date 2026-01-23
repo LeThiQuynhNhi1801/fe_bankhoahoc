@@ -32,6 +32,9 @@
           </div>
         </div>
         <div class="chapters-list">
+          <div v-if="chapters.length === 0" class="no-chapters">
+            <p>Chưa có chương nào trong khóa học này.</p>
+          </div>
           <div
             v-for="(chapter, index) in chapters"
             :key="chapter.id"
@@ -80,43 +83,38 @@
             <p>{{ selectedChapter.description }}</p>
           </div>
 
-          <!-- Documents Section -->
-          <div class="documents-section">
+          <!-- Documents Section - Tài liệu từ chapter.documentUrl (theo Swagger) -->
+          <div v-if="getChapterDocuments().length > 0" class="documents-section">
             <h3>📄 Tài Liệu</h3>
-            <div v-if="getChapterDocuments().length > 0" class="documents-list">
+            <div class="documents-list">
               <div
                 v-for="doc in getChapterDocuments()"
                 :key="doc.id || doc.name"
                 class="document-card"
               >
-                <div class="document-icon">{{ getDocumentIcon(doc.type || doc.fileType) }}</div>
+                <div class="document-icon">📄</div>
                 <div class="document-info">
-                  <h4>{{ doc.name || doc.fileName || doc.title || 'Tài liệu' }}</h4>
+                  <h4>{{ doc.title || doc.name || 'Tài liệu' }}</h4>
                   <p class="document-meta">
-                    {{ doc.size ? formatFileSize(doc.size) : '' }}
-                    {{ doc.type || doc.fileType ? ` • ${(doc.type || doc.fileType).toUpperCase()}` : '' }}
+                    {{ doc.description || 'Tài liệu đính kèm' }}
                   </p>
                 </div>
                 <button 
-                  @click="downloadDocument(doc)" 
+                  @click="viewDocument(doc)" 
                   class="btn-download"
-                  :disabled="isDownloading"
                 >
-                  {{ isDownloading ? 'Đang tải...' : '⬇ Tải xuống' }}
+                  📖 Xem
                 </button>
               </div>
             </div>
-            <div v-else class="no-documents">
-              <p>Chưa có tài liệu nào trong chương này.</p>
-            </div>
           </div>
 
-          <!-- Contents Section (Videos, Bài giảng) -->
-          <div v-if="getChapterContents().length > 0" class="contents-section">
-            <h3>🎥 Nội Dung Học Tập</h3>
+          <!-- Contents Section (Videos với videoUrl) -->
+          <div v-if="getChapterVideos().length > 0" class="contents-section">
+            <h3>🎥 Video</h3>
             <div class="contents-list">
               <div
-                v-for="content in getChapterContents()"
+                v-for="content in getChapterVideos()"
                 :key="content.id"
                 class="content-card"
               >
@@ -186,10 +184,10 @@ export default {
     const course = ref(null)
     const chapters = ref([])
     const selectedChapter = ref(null)
+    const chapterDocuments = ref([]) // Danh sách tài liệu từ API /api/learning/chapters/{chapterId}/contents
     const isLoading = ref(false)
     const error = ref(null)
     const sidebarCollapsed = ref(false)
-    const isDownloading = ref(false)
     const isUpdatingProgress = ref(false)
     const enrollment = ref(null)
     const progress = ref(0)
@@ -218,23 +216,19 @@ export default {
           return
         }
 
-        // Load chapters using Learning API (for enrolled students)
+        // Load chapters - API: GET /api/chapters/course/{courseId}
+        // API tự động phân biệt đã mua hay chưa dựa trên token
         try {
           const chaptersResponse = await learningService.getCourseChapters(courseId)
+          console.log('Chapters response:', chaptersResponse)
           const chaptersData = chaptersResponse?.data ?? chaptersResponse
+          console.log('Chapters data:', chaptersData)
           chapters.value = Array.isArray(chaptersData) ? chaptersData : []
+          console.log('Chapters loaded:', chapters.value.length, 'chapters')
         } catch (err) {
-          console.warn('Could not load chapters via Learning API, trying fallback:', err)
-          // Fallback to regular chapters API
-          try {
-            const { chapterService } = await import('../services/chapterService')
-            const chaptersResponse = await chapterService.getList(courseId)
-            const chaptersData = chaptersResponse?.data ?? chaptersResponse
-            chapters.value = Array.isArray(chaptersData) ? chaptersData : []
-          } catch (fallbackErr) {
-            console.error('Failed to load chapters:', fallbackErr)
-            chapters.value = []
-          }
+          console.error('Failed to load chapters:', err)
+          error.value = `Không thể tải danh sách chương: ${err?.message || 'Lỗi không xác định'}`
+          chapters.value = []
         }
 
         // Load enrollment to get progress
@@ -270,21 +264,40 @@ export default {
     const selectChapter = async (chapter) => {
       selectedChapter.value = chapter
       
-      // Load full chapter details with contents if not already loaded
-      if (chapter.id && (!chapter.contents || chapter.contents.length === 0)) {
+      // Load danh sách tài liệu từ API: GET /api/learning/chapters/{chapterId}/contents
+      if (chapter.id) {
         try {
-          const chapterDetail = await learningService.getChapterDetail(chapter.id)
-          const chapterData = chapterDetail?.data ?? chapterDetail
+          const contentsResponse = await learningService.getChapterContents(chapter.id)
+          const contentsData = contentsResponse?.data ?? contentsResponse
+          const contents = Array.isArray(contentsData) ? contentsData : []
           
-          // Update chapter in list
-          const index = chapters.value.findIndex(c => c.id === chapter.id)
-          if (index !== -1 && chapterData) {
-            chapters.value[index] = { ...chapters.value[index], ...chapterData }
-            selectedChapter.value = chapters.value[index]
+          // Lọc tài liệu (có fileUrl hoặc documentUrl, không có videoUrl)
+          chapterDocuments.value = contents.filter(content => {
+            return (content.fileUrl || content.documentUrl) && !content.videoUrl
+          })
+          
+          // Load full chapter details with contents if not already loaded
+          if (!chapter.contents || chapter.contents.length === 0) {
+            try {
+              const chapterDetail = await learningService.getChapterDetail(chapter.id)
+              const chapterData = chapterDetail?.data ?? chapterDetail
+              
+              // Update chapter in list
+              const index = chapters.value.findIndex(c => c.id === chapter.id)
+              if (index !== -1 && chapterData) {
+                chapters.value[index] = { ...chapters.value[index], ...chapterData }
+                selectedChapter.value = chapters.value[index]
+              }
+            } catch (err) {
+              console.warn('Could not load chapter detail:', err)
+            }
           }
         } catch (err) {
-          console.warn('Could not load chapter detail:', err)
+          console.error('Could not load chapter contents:', err)
+          chapterDocuments.value = []
         }
+      } else {
+        chapterDocuments.value = []
       }
     }
 
@@ -312,54 +325,25 @@ export default {
       selectChapter(chapters.value[index + 1])
     }
 
-    const downloadDocument = async (doc) => {
-      if (!selectedChapter.value?.id || isNaN(selectedChapter.value.id)) {
-        alert('Thông tin chương không hợp lệ.')
+    const viewDocument = (doc) => {
+      // API: Tài liệu từ /api/learning/chapters/{chapterId}/contents có fileUrl hoặc documentUrl
+      if (doc.fileUrl) {
+        window.open(doc.fileUrl, '_blank')
         return
       }
-
-      try {
-        isDownloading.value = true
-        
-        // Try using Learning API first (for students)
-        try {
-          const documentData = await documentService.getChapterDocument(selectedChapter.value.id)
-          const docData = documentData?.data ?? documentData
-          
-          // If document has downloadUrl, use it
-          if (docData?.downloadUrl || docData?.url) {
-            window.open(docData.downloadUrl || docData.url, '_blank')
-            return
-          }
-          
-          // If document is a file, download it
-          if (docData instanceof Blob) {
-            const downloadUrl = window.URL.createObjectURL(docData)
-            const a = document.createElement('a')
-            a.href = downloadUrl
-            a.download = doc?.name || doc?.fileName || 'document'
-            document.body.appendChild(a)
-            a.click()
-            window.URL.revokeObjectURL(downloadUrl)
-            document.body.removeChild(a)
-            return
-          }
-        } catch (learningErr) {
-          console.warn('Could not download via Learning API, trying fallback:', learningErr)
-          
-          // Fallback to old API if doc has id
-          if (doc?.id && !isNaN(doc.id)) {
-            await documentService.download(selectedChapter.value.id, doc.id)
-          } else {
-            throw new Error('Không thể tải tài liệu')
-          }
-        }
-      } catch (err) {
-        console.error('Download document error:', err)
-        alert('Không thể tải tài liệu. Vui lòng thử lại sau.')
-      } finally {
-        isDownloading.value = false
+      
+      if (doc.documentUrl) {
+        window.open(doc.documentUrl, '_blank')
+        return
       }
+      
+      // Fallback: thử các URL khác
+      if (doc.url) {
+        window.open(doc.url, '_blank')
+        return
+      }
+      
+      alert('Tài liệu chưa có URL. Vui lòng liên hệ giảng viên.')
     }
 
     const isChapterCompleted = (chapter) => {
@@ -426,49 +410,45 @@ export default {
     }
 
     const getChapterDocuments = () => {
-      if (!selectedChapter.value) return []
-      
-      // Check for documents in different possible locations
-      if (selectedChapter.value.documents && Array.isArray(selectedChapter.value.documents)) {
-        return selectedChapter.value.documents
-      }
-      
-      // Check if there's a single document object
-      if (selectedChapter.value.document) {
-        return [selectedChapter.value.document]
-      }
-      
-      return []
+      // API: Lấy danh sách tài liệu từ /api/learning/chapters/{chapterId}/contents
+      // Tài liệu đã được load trong selectChapter và lưu trong chapterDocuments
+      return chapterDocuments.value || []
     }
 
-    const getChapterContents = () => {
+    const getChapterVideos = () => {
       if (!selectedChapter.value) return []
       
-      // Contents can be in contents array or contents property
-      if (selectedChapter.value.contents && Array.isArray(selectedChapter.value.contents)) {
-        return selectedChapter.value.contents
-      }
-      
-      return []
+      // API mới: Video là contents có videoUrl
+      const contents = selectedChapter.value.contents || []
+      return contents.filter(content => content.videoUrl)
     }
 
     const viewContent = async (content) => {
       try {
         isLoadingContent.value = true
         
-        // Load full content detail if needed
+        // API mới: sử dụng videoUrl trực tiếp từ content
+        if (content.videoUrl) {
+          window.open(content.videoUrl, '_blank')
+          return
+        }
+        
+        // Fallback: Load full content detail nếu chưa có videoUrl
         if (content.id) {
           const contentDetail = await learningService.getContentDetail(content.id)
           const contentData = contentDetail?.data ?? contentDetail
           selectedContent.value = contentData || content
+          
+          if (selectedContent.value.videoUrl) {
+            window.open(selectedContent.value.videoUrl, '_blank')
+            return
+          }
         } else {
           selectedContent.value = content
         }
         
-        // If content has videoUrl, open it
-        if (selectedContent.value.videoUrl) {
-          window.open(selectedContent.value.videoUrl, '_blank')
-        } else {
+        // Nếu vẫn không có videoUrl
+        if (!selectedContent.value.videoUrl) {
           alert('Nội dung chưa có video. Vui lòng liên hệ giảng viên.')
         }
       } catch (err) {
@@ -504,7 +484,6 @@ export default {
       isLoading,
       error,
       sidebarCollapsed,
-      isDownloading,
       isUpdatingProgress,
       progress,
       isLoadingContent,
@@ -515,10 +494,10 @@ export default {
       selectChapter,
       goToPreviousChapter,
       goToNextChapter,
-      downloadDocument,
       getChapterDocuments,
-      getChapterContents,
+      getChapterVideos,
       viewContent,
+      viewDocument,
       isChapterCompleted,
       markChapterCompleted,
       getDocumentIcon,
@@ -643,6 +622,13 @@ export default {
   flex: 1;
   overflow-y: auto;
   padding: 0.5rem 0;
+}
+
+.no-chapters {
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: #666;
+  font-size: 0.9rem;
 }
 
 .chapter-item {

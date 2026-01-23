@@ -40,22 +40,24 @@ export const API_ENDPOINTS = {
   // Documents API - riêng biệt với Videos
   // Documents được upload trực tiếp vào chapter (PDF, Word, Excel, etc.)
   DOCUMENTS: {
-    UPLOAD: (chapterId) => getApiPath(`/api/chapters/${chapterId}/documents`),
-    // Note: Có thể không có DELETE/DOWNLOAD endpoints riêng, cần kiểm tra Swagger
+    UPLOAD: (courseId, chapterId) => getApiPath(`/api/courses/${courseId}/chapters/${chapterId}/documents`),
+    UPLOAD_BY_CHAPTER: (chapterId) => getApiPath(`/api/chapters/${chapterId}/documents`),
   },
   
-  // Files API - để tải và xem file
+  // Files API - để upload, tải và xem file
   FILES: {
-    DOWNLOAD: getApiPath('/api/files/download'), // Admin/Instructor only
-    GET_CHAPTER_DOCUMENT: (chapterId) => getApiPath(`/api/files/chapters/${chapterId}/document`) // Student only
+    UPLOAD: getApiPath('/api/files'),
+    DOWNLOAD: getApiPath('/api/files'),
+    GET_CHAPTER_DOCUMENT: (chapterId) => getApiPath(`/api/files/chapters/${chapterId}/document`)
   },
   
-  // Learning API - dành cho học viên
+  // Learning API - dành cho học viên (dùng endpoint chapters thông thường)
+  // API tự động phân biệt đã mua hay chưa dựa trên token
   LEARNING: {
-    GET_COURSE_CHAPTERS: (courseId) => getApiPath(`/api/learning/courses/${courseId}/chapters`),
-    GET_CHAPTER_DETAIL: (chapterId) => getApiPath(`/api/learning/chapters/${chapterId}`),
-    GET_CHAPTER_CONTENTS: (chapterId) => getApiPath(`/api/learning/chapters/${chapterId}/contents`),
-    GET_CONTENT_DETAIL: (contentId) => getApiPath(`/api/learning/contents/${contentId}`)
+    GET_COURSE_CHAPTERS: (courseId) => getApiPath(`/api/chapters/course/${courseId}`),
+    GET_CHAPTER_DETAIL: (chapterId) => getApiPath(`/api/chapters/${chapterId}`),
+    GET_CHAPTER_CONTENTS: (chapterId) => getApiPath(`/api/learning/chapters/${chapterId}/contents`), // API lấy danh sách tài liệu của chương
+    GET_CONTENT_DETAIL: (contentId) => getApiPath(`/api/course-contents/${contentId}`)
   },
   
   // Course Content API - quản lý nội dung (Admin/Instructor)
@@ -64,13 +66,8 @@ export const API_ENDPOINTS = {
     GET_BY_CHAPTER: (chapterId) => getApiPath(`/api/course-contents/chapters/${chapterId}`),
     CREATE: (chapterId) => getApiPath(`/api/course-contents/chapters/${chapterId}`),
     UPDATE: (contentId) => getApiPath(`/api/course-contents/${contentId}`),
-    DELETE: (contentId) => getApiPath(`/api/course-contents/${contentId}`)
-  },
-  
-  // Videos API - riêng biệt với Documents
-  // Videos được upload vào course-content (nội dung học tập)
-  VIDEOS: {
-    UPLOAD: (contentId) => getApiPath(`/api/course-contents/${contentId}/video`)
+    DELETE: (contentId) => getApiPath(`/api/course-contents/${contentId}`),
+    UPLOAD_FILE: (contentId) => getApiPath(`/api/course-contents/${contentId}/file`)
   },
   
   // Orders

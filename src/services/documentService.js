@@ -3,16 +3,16 @@ import { API_ENDPOINTS } from '../config/api'
 
 export const documentService = {
   /**
-   * Upload tài liệu cho chương (Admin/Instructor)
-   * @param {number} chapterId - ID của chương
-   * @param {FormData} formData - FormData chứa file và type
+   * Upload file vào course content (Admin/Instructor)
+   * @param {number} contentId - ID của course content
+   * @param {FormData} formData - FormData chứa file
    * @returns {Promise}
    */
-  async upload(chapterId, formData) {
+  async uploadToContent(contentId, formData) {
     try {
-      return await httpClient.upload(API_ENDPOINTS.DOCUMENTS.UPLOAD(chapterId), formData)
+      return await httpClient.upload(API_ENDPOINTS.COURSE_CONTENTS.UPLOAD_FILE(contentId), formData)
     } catch (error) {
-      console.error('Upload document error:', error)
+      console.error('Upload file to content error:', error)
       throw error
     }
   },
@@ -85,6 +85,45 @@ export const documentService = {
   },
 
   /**
+   * Tải/xem tài liệu từ URL
+   * @param {string} documentUrl - URL của tài liệu
+   * @returns {Promise} File blob hoặc redirect
+   */
+  async downloadFromUrl(documentUrl) {
+    try {
+      if (!documentUrl) {
+        throw new Error('Document URL is required')
+      }
+      
+      const token = localStorage.getItem('token')
+      const response = await fetch(documentUrl, {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` })
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error('Download failed')
+      }
+      
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = documentUrl.split('/').pop() || 'document'
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(downloadUrl)
+      document.body.removeChild(a)
+      
+      return true
+    } catch (error) {
+      console.error('Download from URL error:', error)
+      throw error
+    }
+  },
+
+  /**
    * Tải file (Admin/Instructor only)
    * @param {string} filePath - Đường dẫn file
    * @returns {Promise}
@@ -119,5 +158,16 @@ export const documentService = {
       console.error('Download file error:', error)
       throw error
     }
+  },
+
+  /**
+   * Xem tài liệu trong tab mới
+   * @param {string} documentUrl - URL của tài liệu
+   */
+  viewDocument(documentUrl) {
+    if (!documentUrl) {
+      throw new Error('Document URL is required')
+    }
+    window.open(documentUrl, '_blank')
   }
 }

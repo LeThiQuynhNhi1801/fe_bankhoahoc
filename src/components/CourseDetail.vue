@@ -152,9 +152,19 @@
                   </div>
 
                   <!-- Documents/Tài liệu -->
-                  <div v-if="chapter.documents && chapter.documents.length > 0" class="chapter-section">
+                  <div v-if="chapter.documentUrl || (chapter.documents && chapter.documents.length > 0)" class="chapter-section">
                     <h4>📄 Tài Liệu</h4>
                     <div class="documents-grid">
+                      <!-- API mới: sử dụng documentUrl -->
+                      <div v-if="chapter.documentUrl" class="document-item">
+                        <div class="document-icon">📄</div>
+                        <div class="document-info">
+                          <p class="document-name">Tài liệu chương</p>
+                          <p class="document-meta">Tài liệu đính kèm</p>
+                        </div>
+                        <button @click="downloadDocument({ documentUrl: chapter.documentUrl, name: 'Tài liệu chương' })" class="btn-download">⬇ Tải xuống</button>
+                      </div>
+                      <!-- Fallback: documents array -->
                       <div 
                         v-for="(doc, docIndex) in chapter.documents" 
                         :key="docIndex"
@@ -162,18 +172,35 @@
                       >
                         <div class="document-icon">{{ getDocumentIcon(doc.type) }}</div>
                         <div class="document-info">
-                          <p class="document-name">{{ doc.name }}</p>
-                          <p class="document-meta">{{ doc.size }} • {{ doc.type.toUpperCase() }}</p>
+                          <p class="document-name">{{ doc.name || 'Tài liệu' }}</p>
+                          <p class="document-meta">{{ doc.size ? doc.size + ' • ' : '' }}{{ doc.type ? doc.type.toUpperCase() : '' }}</p>
                         </div>
                         <button @click="downloadDocument(doc)" class="btn-download">⬇ Tải xuống</button>
                       </div>
                     </div>
                   </div>
 
-                  <!-- Videos -->
-                  <div v-if="chapter.videos && chapter.videos.length > 0" class="chapter-section">
+                  <!-- Videos/Contents -->
+                  <div v-if="(chapter.contents && chapter.contents.length > 0) || (chapter.videos && chapter.videos.length > 0)" class="chapter-section">
                     <h4>🎥 Video</h4>
                     <div class="videos-grid">
+                      <!-- API mới: sử dụng contents array với videoUrl -->
+                      <div 
+                        v-for="(content, contentIndex) in chapter.contents" 
+                        :key="contentIndex"
+                        class="video-item"
+                      >
+                        <div class="video-icon">🎥</div>
+                        <div class="video-info">
+                          <p class="video-name">{{ content.title || 'Video' }}</p>
+                          <p class="video-meta">
+                            {{ content.duration ? formatDuration(content.duration) + ' • ' : '' }}
+                            {{ content.isPreview ? 'Xem trước' : '' }}
+                          </p>
+                        </div>
+                        <button @click="playVideo(content)" class="btn-play">▶ Xem</button>
+                      </div>
+                      <!-- Fallback: videos array -->
                       <div 
                         v-for="(video, videoIndex) in chapter.videos" 
                         :key="videoIndex"
@@ -181,8 +208,8 @@
                       >
                         <div class="video-icon">🎥</div>
                         <div class="video-info">
-                          <p class="video-name">{{ video.name }}</p>
-                          <p class="video-meta">{{ video.duration }} • {{ video.size }}</p>
+                          <p class="video-name">{{ video.name || 'Video' }}</p>
+                          <p class="video-meta">{{ video.duration ? video.duration + ' • ' : '' }}{{ video.size || '' }}</p>
                         </div>
                         <button @click="playVideo(video)" class="btn-play">▶ Xem</button>
                       </div>
@@ -230,6 +257,7 @@ import { ref, onMounted, reactive, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { courseService } from '../services/courseService'
 import { chapterService } from '../services/chapterService'
+import { documentService } from '../services/documentService'
 import { useAuth } from '../composables/useAuth'
 
 export default {
@@ -320,14 +348,54 @@ export default {
       return icons[type] || '📁'
     }
 
-    const downloadDocument = (doc) => {
-      alert(`Đang tải xuống: ${doc.name}`)
-      // Trong thực tế sẽ có logic download file
+    const downloadDocument = async (doc) => {
+      try {
+        // API mới: sử dụng documentUrl
+        if (doc.documentUrl) {
+          documentService.viewDocument(doc.documentUrl)
+          return
+        }
+        
+        // Fallback: thử các cách khác
+        if (doc.url) {
+          documentService.viewDocument(doc.url)
+          return
+        }
+        
+        // Nếu không có URL, thử download từ API
+        if (doc.id && doc.chapterId) {
+          await documentService.download(doc.chapterId, doc.id)
+          return
+        }
+        
+        alert(`Đang tải xuống: ${doc.name || 'Tài liệu'}`)
+      } catch (err) {
+        console.error('Download document error:', err)
+        alert('Không thể tải tài liệu. Vui lòng thử lại sau.')
+      }
     }
 
     const playVideo = (video) => {
-      alert(`Đang phát video: ${video.name}`)
-      // Trong thực tế sẽ mở video player
+      // API mới: sử dụng videoUrl từ content
+      if (video.videoUrl) {
+        window.open(video.videoUrl, '_blank')
+        return
+      }
+      
+      // Fallback: thử url
+      if (video.url) {
+        window.open(video.url, '_blank')
+        return
+      }
+      
+      alert(`Đang phát video: ${video.title || video.name || 'Video'}`)
+    }
+
+    const formatDuration = (seconds) => {
+      if (!seconds) return ''
+      const mins = Math.floor(seconds / 60)
+      const secs = seconds % 60
+      return `${mins}:${secs.toString().padStart(2, '0')}`
     }
 
     const formatPrice = (price) => {
@@ -510,6 +578,7 @@ export default {
       getDocumentIcon,
       downloadDocument,
       playVideo,
+      formatDuration,
       formatPrice,
       addToCart,
       buyNow,
