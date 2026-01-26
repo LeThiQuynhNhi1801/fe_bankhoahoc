@@ -83,7 +83,7 @@
             <p>{{ selectedChapter.description }}</p>
           </div>
 
-          <!-- Documents Section - Tài liệu từ chapter.documentUrl (theo Swagger) -->
+          <!-- Documents Section - danh sách tài liệu của chương -->
           <div v-if="getChapterDocuments().length > 0" class="documents-section">
             <h3>📄 Tài Liệu</h3>
             <div class="documents-list">
@@ -91,6 +91,7 @@
                 v-for="doc in getChapterDocuments()"
                 :key="doc.id || doc.name"
                 class="document-card"
+                @click="viewDocument(doc)"
               >
                 <div class="document-icon">📄</div>
                 <div class="document-info">
@@ -100,11 +101,27 @@
                   </p>
                 </div>
                 <button 
-                  @click="viewDocument(doc)" 
+                  type="button"
                   class="btn-download"
                 >
-                  📖 Xem
+                  📖 Xem trong khung
                 </button>
+              </div>
+            </div>
+
+            <!-- Khung hiển thị nội dung tài liệu -->
+            <div v-if="selectedDocument" class="document-viewer">
+              <h3>Nội dung tài liệu</h3>
+              <div class="document-viewer-frame-wrapper">
+                <iframe
+                  v-if="getDocumentViewerUrl(selectedDocument)"
+                  class="document-frame"
+                  :src="getDocumentViewerUrl(selectedDocument)"
+                  frameborder="0"
+                ></iframe>
+                <p v-else class="document-viewer-message">
+                  Không thể hiển thị tài liệu này. Vui lòng liên hệ giảng viên.
+                </p>
               </div>
             </div>
           </div>
@@ -185,6 +202,7 @@ export default {
     const chapters = ref([])
     const selectedChapter = ref(null)
     const chapterDocuments = ref([]) // Danh sách tài liệu từ API /api/learning/chapters/{chapterId}/contents
+    const selectedDocument = ref(null) // Tài liệu đang được xem trong khung
     const isLoading = ref(false)
     const error = ref(null)
     const sidebarCollapsed = ref(false)
@@ -325,25 +343,29 @@ export default {
       selectChapter(chapters.value[index + 1])
     }
 
+    const getDocumentViewerUrl = (doc) => {
+      if (!doc) return ''
+
+      const rawUrl = doc.fileUrl || doc.documentUrl || doc.url
+      if (!rawUrl) return ''
+
+      const url = String(rawUrl)
+      const lower = url.toLowerCase()
+
+      // Nếu là file Office (doc, docx, xls, xlsx, ppt, pptx) thì dùng Office Online Viewer để nhúng
+      if (lower.endsWith('.doc') || lower.endsWith('.docx') ||
+          lower.endsWith('.xls') || lower.endsWith('.xlsx') ||
+          lower.endsWith('.ppt') || lower.endsWith('.pptx')) {
+        return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
+      }
+
+      // Các loại file khác (pdf, hình ảnh, v.v.) hiển thị trực tiếp
+      return url
+    }
+
     const viewDocument = (doc) => {
-      // API: Tài liệu từ /api/learning/chapters/{chapterId}/contents có fileUrl hoặc documentUrl
-      if (doc.fileUrl) {
-        window.open(doc.fileUrl, '_blank')
-        return
-      }
-      
-      if (doc.documentUrl) {
-        window.open(doc.documentUrl, '_blank')
-        return
-      }
-      
-      // Fallback: thử các URL khác
-      if (doc.url) {
-        window.open(doc.url, '_blank')
-        return
-      }
-      
-      alert('Tài liệu chưa có URL. Vui lòng liên hệ giảng viên.')
+      // Student chỉ được xem: lưu document đang chọn để hiển thị trong khung, không mở tab mới/không tải về
+      selectedDocument.value = doc
     }
 
     const isChapterCompleted = (chapter) => {
@@ -481,6 +503,7 @@ export default {
       course,
       chapters,
       selectedChapter,
+      selectedDocument,
       isLoading,
       error,
       sidebarCollapsed,
@@ -498,6 +521,7 @@ export default {
       getChapterVideos,
       viewContent,
       viewDocument,
+      getDocumentViewerUrl,
       isChapterCompleted,
       markChapterCompleted,
       getDocumentIcon,
@@ -835,6 +859,40 @@ export default {
 .btn-download:disabled {
   background: #d1d5db;
   cursor: not-allowed;
+}
+
+.document-viewer {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.document-viewer h3 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  color: #333;
+}
+
+.document-viewer-frame-wrapper {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  background: white;
+}
+
+.document-frame {
+  width: 100%;
+  height: 600px;
+  border: none;
+}
+
+.document-viewer-message {
+  margin: 1rem;
+  color: #666;
+  font-size: 0.9rem;
+  text-align: center;
 }
 
 .no-documents {

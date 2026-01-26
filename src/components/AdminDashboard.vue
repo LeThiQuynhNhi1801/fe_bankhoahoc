@@ -93,7 +93,6 @@
 <script>
 import { ref, onMounted } from 'vue'
 import { adminService } from '../services/adminService'
-import { orderService } from '../services/orderService'
 import { courseService } from '../services/courseService'
 
 export default {
@@ -109,34 +108,43 @@ export default {
     const loadStats = async () => {
       try {
         isLoading.value = true
-        // Load stats từ API
+        // Load stats từ API /api/admin/statistics (theo Swagger)
         try {
-          const stats = await adminService.getStats()
-          totalCourses.value = stats.totalCourses || 0
-          totalStudents.value = stats.totalStudents || 0
-          totalRevenue.value = stats.totalRevenue || 0
-          newOrders.value = stats.newOrders || 0
-          recentOrders.value = stats.recentOrders || []
+          const stats = await adminService.getStatistics()
+          const statsData = stats?.data ?? stats
+          totalCourses.value = statsData?.totalCourses || 0
+          totalStudents.value = statsData?.totalStudents || 0
+          totalRevenue.value = statsData?.totalRevenue || 0
+          newOrders.value = statsData?.newOrders || 0
+          recentOrders.value = statsData?.recentOrders || []
         } catch (error) {
-          console.warn('Admin stats API not available, calculating from data:', error)
+          console.warn('Admin statistics API not available, calculating from data:', error)
           // Fallback: tính từ dữ liệu có sẵn
           const courses = await courseService.getList()
-          const orders = await orderService.getList()
-          const courseList = Array.isArray(courses) ? courses : (courses.data || [])
-          const orderList = Array.isArray(orders) ? orders : (orders.data || [])
+          const orders = await adminService.getAllOrders() // Dùng adminService để lấy tất cả orders
+          const courseList = Array.isArray(courses) ? courses : (courses?.data || [])
+          const orderList = Array.isArray(orders) ? orders : (orders?.data || [])
           
           totalCourses.value = courseList.length
           totalStudents.value = courseList.reduce((sum, c) => sum + (c.studentCount || 0), 0)
-          totalRevenue.value = orderList.reduce((sum, o) => sum + (o.totalAmount || 0), 0)
+          
+          // QUAN TRỌNG: Chỉ tính doanh thu từ đơn hàng đã thanh toán (PAID)
+          totalRevenue.value = orderList
+            .filter(o => o.status === 'PAID')
+            .reduce((sum, o) => sum + (o.totalAmount || 0), 0)
+          
           newOrders.value = orderList.filter(o => o.status === 'PENDING').length
-          recentOrders.value = orderList.slice(0, 10).map(order => ({
-            id: order.id,
-            customer: order.userName || 'N/A',
-            amount: order.totalAmount || 0,
-            status: order.status?.toLowerCase() || 'pending',
-            statusText: getStatusText(order.status),
-            date: new Date(order.createdAt).toLocaleDateString('vi-VN')
-          }))
+          recentOrders.value = orderList
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(0, 10)
+            .map(order => ({
+              id: order.id,
+              customer: order.userName || 'N/A',
+              amount: order.totalAmount || 0,
+              status: order.status?.toLowerCase() || 'pending',
+              statusText: getStatusText(order.status),
+              date: new Date(order.createdAt).toLocaleDateString('vi-VN')
+            }))
         }
       } catch (error) {
         console.error('Failed to load admin stats:', error)
